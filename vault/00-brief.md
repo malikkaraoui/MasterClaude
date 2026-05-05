@@ -1,29 +1,30 @@
 # Brief projet
 
-> Géré par Peter via claude-atelier vault. Markdown vivant, pas document gravé.
+> Géré par Peter via MasterClaude vault. Markdown vivant, pas document gravé.
 
 ## État court
 
-- Projet : claude-atelier (framework Claude Code)
-- Phase : Phase 2 — v0.23.11 livrée (Phases A+B+C vault livrées : index SHA256, graphe, query/path/explain, export multi-formats, watch daemon, cron, MCP) · next: Phase D vault add/route
-- Objectif courant : Phase D — `vault add` (inbox intelligente) + `vault route` (classification automatique) + storytelling Peter à jour
-- Prochaine action utile : Définir scope Phase D + bump version v0.23.12
+- Projet : MasterClaude (runtime Claude Code autonome — usage personnel)
+- Phase : v0.1.0 — fork initial depuis claude-atelier v0.26.0 · next: LaunchAgent daemon opérationnel + routing Telegram multi-projets
+- Objectif courant : rendre le master daemon opérationnel (LaunchAgent KeepAlive, sessions par projet, routing Telegram)
+- Prochaine action utile : implémenter Phase E1 — bin/master.js + Telegram polling minimal
 
 ## À lire en priorité
 
-- docs/proposals/peter-vault-graphify-plus-plan.md — plan complet Peter
+- VISION.md — architecture globale et milestones
 - .claude/CLAUDE.md §0 — contexte session courant
-- vault/40-roadmap.md — prochaines phases Peter
+- vault/40-roadmap.md — prochaines phases
 
 ## Décisions actives
 
-- Stack Node.js pour hooks/scripts, Go uniquement pour ollama-proxy
-- Peter = couche mémoire vivante (pas archive statique)
-- Vault local-first, pas de cloud obligatoire
+- MasterClaude = superset de claude-atelier (pas une dépendance, une inclusion)
+- Stack Node.js pour hooks/scripts/daemon, Go uniquement pour ollama-proxy, Python pour Telegram bridge
+- Local-first : le core tourne sans service externe (cloud = optionnel)
 - Pre-push gate obligatoire avant tout push
+- Pas publié sur npm — usage personnel uniquement
 
 ## Risques / angles morts
 
-- proxy tool_use mapping Go encore incomplet (bloquant pour Ollama bidirectionnel)
-- Cache mtime Phase B : faux-négatifs possibles en cas d'écriture programmatique très rapide (< 1ms) — différé Phase C
-- MCPs actifs (qmd + github) consomment fenêtre contexte (~70k)
+- Telegram bridge (Phase D livré dans claude-atelier) à adapter pour routing multi-projets
+- LaunchAgent : comportement au boot machine à tester end-to-end
+- Proxy tool_use mapping Go encore incomplet (bloquant pour Ollama bidirectionnel)

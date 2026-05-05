@@ -1,6 +1,6 @@
 # Mailbox projet
 
-> Géré par Peter via claude-atelier vault. Markdown vivant, pas document gravé.
+> Géré par Peter via MasterClaude vault. Markdown vivant, pas document gravé.
 
 ## Courrier entrant
 
