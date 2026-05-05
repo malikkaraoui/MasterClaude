@@ -178,14 +178,12 @@ async function askClaude(userMsg, projectKey) {
     await send('⚙️ Je traite, ça prend un moment…').catch(() => {});
   }, 8000);
 
-  // Heartbeat toutes les 30s — s'arrête à 280s pour éviter race avec timeout 300s
+  // Heartbeat toutes les 60s — sans limite de durée
   let heartbeatCount = 0;
   const heartbeat = setInterval(async () => {
     heartbeatCount++;
-    const elapsed = heartbeatCount * 30;
-    if (elapsed >= 280) return;
-    await send(`⏳ Toujours en cours… (${elapsed}s)`).catch(() => {});
-  }, 30000);
+    await send(`⏳ Toujours en cours… (${heartbeatCount * 60}s)`).catch(() => {});
+  }, 60000);
 
   return new Promise((resolve) => {
     const proc = spawn('claude', args, { cwd: sessionDir, encoding: 'utf8', env: childEnv });
@@ -194,7 +192,6 @@ async function askClaude(userMsg, projectKey) {
     proc.stdout.on('data', d => out += d);
     proc.on('close', () => { cleanup(); resolve(out.trim()); });
     proc.on('error', e => { cleanup(); resolve(`❌ Erreur CLI : ${e.message}`); });
-    setTimeout(() => { cleanup(); proc.kill(); resolve('⏱ Timeout (300s)'); }, 300000);
   });
 }
 
