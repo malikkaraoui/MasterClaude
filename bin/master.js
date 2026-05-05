@@ -12,7 +12,6 @@ import { spawn } from 'node:child_process';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink } from 'node:fs';
-import Anthropic from '@anthropic-ai/sdk';
 import { loadVaultBrief } from '../src/master/vault-loader.js';
 import { SessionManager } from '../src/master/session-manager.js';
 import { ContextMonitor } from '../src/master/context-monitor.js';
@@ -55,7 +54,6 @@ if (!TOKEN || !CHAT_ID) {
   process.exit(1);
 }
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const sessions = new SessionManager();
 const ctx = new ContextMonitor();
 
@@ -111,19 +109,25 @@ function buildSystemPrompt() {
   ].filter(Boolean).join('\n\n');
 }
 
-// --- Appel API Anthropic (conversation persistante) ---
-async function askClaude(userMsg, projectKey) {
-  const messages = ctx.getMessages(projectKey);
-  messages.push({ role: 'user', content: userMsg });
+// --- Appel claude CLI (couvert par plan Max — historique injecté dans le prompt) ---
+function askClaude(userMsg, projectKey) {
+  const history = ctx.getContext(projectKey);
+  const system = buildSystemPrompt();
+  const fullPrompt = history
+    ? `${system}\n\n[Historique]\n${history}\n\nMalik: ${userMsg}`
+    : `${system}\n\nMalik: ${userMsg}`;
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    system: buildSystemPrompt(),
-    messages,
+  return new Promise((resolve) => {
+    const proc = spawn('claude', ['--print', '--output-format', 'text', '-p', fullPrompt], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    });
+    let out = '';
+    proc.stdout.on('data', d => out += d);
+    proc.on('close', () => resolve(out.trim()));
+    proc.on('error', e => resolve(`❌ Erreur CLI : ${e.message}`));
+    setTimeout(() => { proc.kill(); resolve('⏱ Timeout'); }, 60000);
   });
-
-  return response.content[0]?.text?.trim() || '';
 }
 
 // --- Spawn session Claude sur un projet (non-bloquant) ---

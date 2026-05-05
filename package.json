@@ -77,7 +77,6 @@
     "test:telegram": "node test/telegram.test.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.93.0",
     "better-sqlite3": "^12.9.0"
   }
 }
