@@ -11,10 +11,9 @@ import { readFileSync, existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink } from 'node:fs';
+import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir } from 'node:fs';
 import { loadVaultBrief } from '../src/master/vault-loader.js';
 import { SessionManager } from '../src/master/session-manager.js';
-import { ContextMonitor } from '../src/master/context-monitor.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -55,7 +54,6 @@ if (!TOKEN || !CHAT_ID) {
 }
 
 const sessions = new SessionManager();
-const ctx = new ContextMonitor();
 
 // --- Telegram ---
 function tgPost(method, data) {
@@ -109,19 +107,28 @@ function buildSystemPrompt() {
   ].filter(Boolean).join('\n\n');
 }
 
-// --- Appel claude CLI (couvert par plan Max — historique injecté dans le prompt) ---
+// Répertoires de session par clé — Claude Code gère l'historique nativement (--continue)
+const SESSION_DIRS = new Map();
+
+function getSessionDir(projectKey) {
+  if (!SESSION_DIRS.has(projectKey)) {
+    const dir = join(ROOT, 'sessions', projectKey.replace(/[^a-z0-9_-]/gi, '_'));
+    _mkdir(dir, { recursive: true });
+    SESSION_DIRS.set(projectKey, dir);
+  }
+  return SESSION_DIRS.get(projectKey);
+}
+
+// --- Appel claude CLI avec --continue : zéro réinjection d'historique ---
 function askClaude(userMsg, projectKey) {
-  const history = ctx.getContext(projectKey);
+  const sessionDir = getSessionDir(projectKey);
   const system = buildSystemPrompt();
-  const fullPrompt = history
-    ? `${system}\n\n[Historique]\n${history}\n\nMalik: ${userMsg}`
-    : `${system}\n\nMalik: ${userMsg}`;
+  const prompt = `${system}\n\n${userMsg}`;
+  // --continue reprend la dernière conversation du répertoire (historique géré par Claude Code)
+  const args = ['--print', '--output-format', 'text', '--continue', '-p', prompt];
 
   return new Promise((resolve) => {
-    const proc = spawn('claude', ['--print', '--output-format', 'text', '-p', fullPrompt], {
-      cwd: ROOT,
-      encoding: 'utf8',
-    });
+    const proc = spawn('claude', args, { cwd: sessionDir, encoding: 'utf8' });
     let out = '';
     proc.stdout.on('data', d => out += d);
     proc.on('close', () => resolve(out.trim()));
@@ -222,12 +229,11 @@ while (running) {
         continue;
       }
 
-      // Message → Claude (API persistante)
+      // Message → Claude (session persistante via --continue)
       const projectKey = sessions.active?.name || 'global';
       try {
         const reply = await askClaude(text, projectKey);
         if (reply) {
-          ctx.push(projectKey, text, reply);
           await send(reply).catch(e =>
             process.stderr.write(`[master] erreur send: ${e.message}\n`)
           );
