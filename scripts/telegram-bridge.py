@@ -65,6 +65,8 @@ VAULT_INBOX = os.getenv("VAULT_INBOX", "vault/.peter/inbox/telegram")
 VAULT_MAILBOX = os.getenv("VAULT_MAILBOX", "vault/10-mailbox.md")
 VAULT_WRITE_ENABLED = os.getenv("VAULT_WRITE_ENABLED", "true").lower() == "true"
 
+VAULT_MALIK_PATH = os.getenv("VAULT_MALIK_PATH", "/Users/malik/Vault/Malik")
+
 DB_PATH = os.path.expanduser("~/.claude/telegram-bridge.db")
 FIFO_PATH = "/tmp/claude-telegram-out"
 
@@ -191,6 +193,52 @@ class RateLimiter:
 
 
 # ============================================================================
+# Vault Malik — contexte cerveau
+# ============================================================================
+
+def build_vault_malik_context() -> str:
+    """Charge les fichiers clés du vault Malik pour injection dans le system prompt."""
+    vault = Path(VAULT_MALIK_PATH)
+    if not vault.exists():
+        logger.warning(f"Vault Malik introuvable : {VAULT_MALIK_PATH}")
+        return ""
+
+    parts: list[str] = [
+        "Tu as accès au vault personnel de Malik (cerveau du projet)."
+        " Utilise ces données pour contextualiser tes réponses.\n"
+    ]
+
+    # Index projets (source de vérité)
+    index_file = vault / "index.md"
+    if index_file.exists():
+        parts.append("### Index projets Malik\n" + index_file.read_text(encoding="utf-8")[:3500])
+
+    # Synthèse synergies cross-projets
+    synth_file = vault / "syntheses/projets-synergies.md"
+    if synth_file.exists():
+        parts.append("### Synergies & vases communicants\n" + synth_file.read_text(encoding="utf-8")[:2500])
+
+    # Journal récent (50 dernières lignes)
+    log_file = vault / "log.md"
+    if log_file.exists():
+        lines = log_file.read_text(encoding="utf-8").splitlines()
+        parts.append("### Journal vault (récent)\n" + "\n".join(lines[-50:]))
+
+    return "\n\n".join(parts)
+
+
+# Chargé une fois au démarrage du bridge (rechargeable via /reload)
+_VAULT_MALIK_CONTEXT: str = ""
+
+
+def reload_vault_context() -> str:
+    global _VAULT_MALIK_CONTEXT
+    _VAULT_MALIK_CONTEXT = build_vault_malik_context()
+    logger.info(f"Vault Malik chargé : {len(_VAULT_MALIK_CONTEXT)} chars")
+    return _VAULT_MALIK_CONTEXT
+
+
+# ============================================================================
 # Claude / Ollama Runner
 # ============================================================================
 
@@ -219,13 +267,11 @@ class ClaudeRunner:
                     json={
                         "model": OLLAMA_CHAT_MODEL,
                         "system": (
-                            "Tu es Peter, l'agent IA du projet claude-atelier. "
+                            "Tu es MasterClaude, l'assistant IA personnel de Malik. "
                             "Tu réponds directement, en français, de façon concise et actionnable. "
-                            "Tu ne rédiges pas de réponse 'pour' quelqu'un — tu ES la réponse. "
-                            "IMPORTANT : commence TOUJOURS ta réponse par 'Peter : ' (avec espace après les deux points). "
-                            "Tu connais le vault du projet (vault/*.md) et tu agis comme mainteneur du projet. "
-                            "Important : l'outil s'appelle Claude (et non 'Clogue' ou autre). "
-                            "Si l'utilisateur mentionne 'Clogue', corrige silencieusement en 'Claude'."
+                            "Tu connais tous les projets de Malik, ses objectifs, ses décisions en cours. "
+                            "IMPORTANT : commence TOUJOURS ta réponse par 'Claude : ' (avec espace après les deux points). "
+                            + (_VAULT_MALIK_CONTEXT[:3000] if _VAULT_MALIK_CONTEXT else "")
                         ),
                         "prompt": user_message,
                         "stream": False
@@ -238,12 +284,24 @@ class ClaudeRunner:
             logger.error(f"Ollama chat error: {e}")
             return f"Erreur Ollama: {e}", 0.0
 
+    def _build_claude_args(self) -> list[str]:
+        """Construit les arguments CLI sans concaténation shell."""
+        args = ["claude", "--output-format", "text"]
+        if _VAULT_MALIK_CONTEXT:
+            prefix = (
+                "Tu es MasterClaude, assistant IA personnel de Malik. "
+                "Réponds en français, direct et actionnable. "
+                "Tu connais tous ses projets via le vault ci-dessous.\n\n"
+            )
+            args += ["--append-system-prompt", prefix + _VAULT_MALIK_CONTEXT[:4000]]
+        return args
+
     async def _run_claude_cli(self, user_message: str) -> Tuple[str, float]:
         """Run claude CLI via stdin pipe. No shell — no injection risk."""
         estimated_cost = 0.01  # placeholder; real cost requires --output-format json parsing
 
         proc = await asyncio.create_subprocess_exec(
-            "claude",
+            *self._build_claude_args(),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -607,6 +665,17 @@ class TelegramBot:
         else:
             await update.message.reply_text("Claude process is idle")
 
+    async def cmd_reload(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Recharge le vault Malik en mémoire."""
+        user_id = update.effective_user.id
+        if not await self._check_auth(user_id):
+            return
+        ctx = reload_vault_context()
+        size_kb = len(ctx) // 1024
+        await update.message.reply_text(
+            f"Vault Malik rechargé — {size_kb} Ko injectés dans le contexte."
+        )
+
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         if not await self._check_auth(user_id):
@@ -738,6 +807,7 @@ class TelegramBot:
         self.app.add_handler(CommandHandler("cd", self.cmd_cd))
         self.app.add_handler(CommandHandler("budget", self.cmd_budget))
         self.app.add_handler(CommandHandler("pulse", self.cmd_pulse))
+        self.app.add_handler(CommandHandler("reload", self.cmd_reload))
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         self.app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, self.handle_voice))
 
@@ -754,6 +824,7 @@ class TelegramBot:
 # ============================================================================
 
 async def main():
+    reload_vault_context()
     bot = TelegramBot()
     await bot.run()
 
