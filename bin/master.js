@@ -130,9 +130,11 @@ async function askClaude(userMsg, projectKey) {
     ? `${system}\n\n[Mémoire pertinente]\n${relevant}\n\n${userMsg}`
     : `${system}\n\n${userMsg}`;
   const args = ['--print', '--output-format', 'text', '--continue', '-p', prompt];
+  const childEnv = { ...process.env };
+  delete childEnv.ANTHROPIC_API_KEY; // Claude Code utilise OAuth Max plan, pas la clé API
 
   return new Promise((resolve) => {
-    const proc = spawn('claude', args, { cwd: sessionDir, encoding: 'utf8' });
+    const proc = spawn('claude', args, { cwd: sessionDir, encoding: 'utf8', env: childEnv });
     let out = '';
     proc.stdout.on('data', d => out += d);
     proc.on('close', () => resolve(out.trim()));
@@ -144,9 +146,12 @@ async function askClaude(userMsg, projectKey) {
 // --- Spawn session Claude sur un projet (non-bloquant) ---
 function spawnProjectSession(projectPath, prompt) {
   return new Promise((resolve) => {
+    const childEnv2 = { ...process.env };
+    delete childEnv2.ANTHROPIC_API_KEY;
     const proc = spawn('claude', ['--print', '--output-format', 'text', '-p', prompt], {
       cwd: projectPath,
       encoding: 'utf8',
+      env: childEnv2,
     });
     let out = '';
     proc.stdout.on('data', d => out += d);
