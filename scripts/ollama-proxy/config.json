@@ -1,0 +1,25 @@
+{
+  "ollama_url": "http://localhost:11434",
+  "port": "4000",
+  "model": "qwen3.5:4b",
+  "triage": true,
+  "triage_model": "qwen3.5:4b",
+  "anthropic_url": "https://api.anthropic.com",
+  "presets": [
+    {
+      "name": "light",
+      "model": "qwen3.5:4b",
+      "max_ram_gb": 8
+    },
+    {
+      "name": "standard",
+      "model": "qwen3.5:9b",
+      "max_ram_gb": 16
+    },
+    {
+      "name": "heavy",
+      "model": "qwen3.5:35b",
+      "max_ram_gb": 0
+    }
+  ]
+}

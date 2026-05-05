@@ -1,0 +1,88 @@
+# .gitignore — Template claude-atelier
+# Copie ce fichier a la racine de ton projet avant le premier commit.
+# Fusionner avec un .gitignore existant si necessaire.
+
+# Env / Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+id_rsa*
+id_ed25519*
+*.keystore
+*.jks
+
+# Service accounts / credentials
+google-services.json
+GoogleService-Info.plist
+serviceAccountKey.json
+*credentials*.json
+*secret*.json
+*token*.json
+*-service-account.json
+
+# Cloud provider
+.aws/credentials
+.aws/config
+.gcloud/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build / Dist
+dist/
+build/
+*.tgz
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Java
+target/
+*.class
+*.jar
+*.war
+
+# Runtime / logs / DB
+*.log
+*.sqlite
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Tests / Coverage
+coverage/
+.nyc_output/
+htmlcov/
+.coverage
+
+# Claude Code local state
+.claude/projects/
+.claude/todos/
+.claude/shell-snapshots/
+.claude-backup-*/

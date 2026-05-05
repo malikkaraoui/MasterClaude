@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "subject": "Maintenance post Phase B : fix review Copilot, bump 0.23.5, vault projet, gitignore",
+    "date": "2026-05-03",
+    "type": "review",
+    "priority": "basse",
+    "reviewedRange": "2faf46f4647180950819ffed074296c3d8119ce0..76ac95bffa07e65dc0a413ebc84e05ad476f6c30"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Commits de maintenance post Phase B : (1) fix appliquer review Copilot #37 — test deletedCount, hook chemin relatif, settings.json nettoyé ; (2) merge PR #38 feat vault Phase B dans main ; (3) bump version 0.23.5 + tag ; (4) Peter met à jour le vault projet (00-brief, 40-roadmap, PETER_REPORT, §0 CLAUDE.md, docs/proposals mis à jour par Malik) ; (5) vault/index/ et vault/.peter/ ajoutés au .gitignore — sorties générées ne doivent pas être commitées.",
+    "question": "Le choix de ne pas commiter vault/index/manifest.json et vault/.peter/state.json (ajout .gitignore) est-il correct ? Ces fichiers générés doivent-ils rester locaux ou être versionnés pour faciliter le partage d'état entre développeurs / sessions ?",
+    "filesToRead": [
+      ".gitignore",
+      "bin/vault.js",
+      "vault/00-brief.md",
+      ".claude/CLAUDE.md"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "auto-assessment",
+    "content": "## Revue maintenance post Phase B\n\n### Commits couverts\n- b803eef : fix review Copilot #37 — 3 corrections appliquées (test deletedCount, hook chemin relatif, settings.json nettoyé). Correct, les 3 points sont résolus.\n- 037bcb4 : merge PR #38 feat vault Phase B — CI verte sur Node 18/20/22 + shellcheck + actionlint.\n- 0c090be : bump 0.23.5 + tag v0.23.5 poussé. gen-help régénéré.\n- 9f475ec : vault projet mis à jour (00-brief Phase B livré, 40-roadmap Phase C en vue, PETER_REPORT régénéré, §0 CLAUDE.md actualisé, docs/proposals enrichi par Malik avec 261 lignes).\n- 76ac95b : vault/index/ et vault/.peter/ ajoutés au .gitignore, fichiers générés retirés du tracking git.\n\n### Sur la question .gitignore\nLe choix est correct pour un usage mono-développeur ou un framework distribué via npm : manifest.json et state.json sont des sorties générées qui dépendent de l'environnement local. Les committer causerait des conflits et du bruit dans git. Si un usage multi-développeurs avec partage d'état est envisagé, un stockage alternatif (cloud, SQLite, API) serait plus approprié que git. Pour Phase C, graph.json sera également généré — même traitement recommandé.\n\n### Aucune régression détectée\nnpm test 37/37 passing. Gate CI verte.",
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'."
+  },
+  "integration": {
+    "date": "2026-05-03",
+    "retained_implement": [
+      "Tous les commits de maintenance validés sans action supplémentaire requise",
+      ".gitignore : vault/index/ et vault/.peter/ correctement exclus",
+      "vault projet : §0 CLAUDE.md + 00-brief + 40-roadmap + PETER_REPORT à jour"
+    ],
+    "deferred": [
+      "Partage d'état vault entre développeurs : décision différée Phase C/D si besoin multi-dev"
+    ],
+    "verdict": "Maintenance post Phase B vérifiée : 5 commits chore/fix sans régression. vault/index/ gitignorés (décision correcte pour usage local-first). npm test 37/37. Version 0.23.5 taguée et publiée. Aucune action corrective requise."
+  }
+}

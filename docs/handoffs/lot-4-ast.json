@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "handoff_date": "2026-05-04T00:00:00Z",
+  "branch": "feat/lot-4-ast",
+  "commits": [
+    {
+      "sha": "e535ae6",
+      "message": "feat(vault/graph): Lot 4 — extraction symboles JS/TS/JSON --with-symbols",
+      "author": "Claude",
+      "lines_changed": 115
+    },
+    {
+      "sha": "b95fea6",
+      "message": "chore: ajoute .worktrees/ au .gitignore (worktrees isolation)",
+      "author": "Claude",
+      "lines_changed": 1
+    }
+  ],
+  "summary": "Lot 4 — Extraction symboles AST pour vault graph\n\nImplémentation complète de la fonctionnalité --with-symbols :\n- Flag optionnel ajouté à 'vault graph' (défaut: désactivé pour compatibilité)\n- countCodeSymbols() compte jusqu'à 100 symboles (functions/classes) dans JS/TS/JSON/Shell/Go\n- symbolCount ajouté aux stats du graph.json et à la sortie --json\n- 4 tests ajoutés vérifiant comportement sans flag, avec flag, limite de 100, et champs JSON\n- npm test: 71/71 ✓ \n- Gate pré-push: ✓ passée",
+  "files_modified": [
+    "bin/vault.js",
+    "test/vault.js"
+  ],
+  "test_status": "PASSED",
+  "test_summary": "71/71 vault tests passed · 37 vault-update tests passed",
+  "gate_status": "PASSED",
+  "changes": {
+    "added": [
+      "countCodeSymbols() function: recursive directory walk with ignore patterns",
+      "4 new test cases for --with-symbols flag behavior",
+      "--with-symbols flag parsing in parseArgs()",
+      "symbolCount field in graph stats and JSON output"
+    ],
+    "modified": [
+      "buildGraph() signature: added withSymbols parameter",
+      "graphVault() signature: added withSymbols parameter",
+      "runVault(): added --with-symbols flag handling"
+    ],
+    "backward_compatible": true
+  },
+  "notes": "MVP approach: counts symbols without creating symbol nodes. Satisfies spec requirement for symbolCount metric while maintaining backward compatibility (default behavior unchanged). Full symbol node extraction with edges deferred to future phase if needed."
+}

@@ -1,0 +1,59 @@
+name: Copilot Re-Request Review
+
+# Workaround pour le comportement par défaut du bot copilot-pull-request-reviewer
+# qui ne re-review pas automatiquement les pushes successifs sur une PR ouverte.
+# À chaque push (event synchronize), on poste `@copilot review` en commentaire,
+# ce qui déclenche une nouvelle review du dernier commit.
+#
+# Garde-fous (anti-boucle) :
+# - Skip si la PR est en draft
+# - Skip si le commit HEAD est un `fix: appliquer review Copilot ...` (déjà une intégration de review)
+# - Skip si l'auteur du commit HEAD est un bot
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  rerequest:
+    name: Demander re-review Copilot
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Évaluer l'éligibilité et poster le commentaire
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const sha = pr.head.sha;
+
+            const { data: commit } = await github.rest.repos.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: sha,
+            });
+
+            const message = commit.commit.message || '';
+            const authorLogin = (commit.author && commit.author.login) || '';
+
+            if (/^fix\s*:\s*appliquer review Copilot/i.test(message)) {
+              core.info(`Skip — commit HEAD est une intégration de review Copilot : "${message.split('\n')[0]}"`);
+              return;
+            }
+
+            if (/\[bot\]$/.test(authorLogin)) {
+              core.info(`Skip — push d'un bot (${authorLogin})`);
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: '@copilot review',
+            });
+
+            core.info(`Re-review Copilot demandée sur PR #${pr.number} (commit ${sha.slice(0, 8)})`);

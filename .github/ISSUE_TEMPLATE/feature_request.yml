@@ -1,0 +1,48 @@
+name: "✨ Feature Request"
+description: "Proposer une nouvelle fonctionnalité"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Une bonne feature request explique le **problème** avant la solution.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Catégorie
+      options:
+        - Nouveau hook (enforcement)
+        - Nouveau satellite (stack)
+        - Nouveau skill (slash command)
+        - Nouvel agent nommé
+        - Amélioration CLI
+        - Traduction (EN, ES, etc.)
+        - Mode nuit / autonomie
+        - Autre
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Quel problème résous-tu ?
+      description: "Décris le problème que tu rencontres avec Claude Code aujourd'hui"
+      placeholder: "Quand je fais X, Claude fait Y au lieu de Z..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution proposée
+      description: "Comment tu verrais la solution ?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: hookify
+    attributes:
+      label: "Hookifiable ?"
+      description: "Ce problème peut-il être détecté par un script bash ? Si oui, quel pattern ?"
+      placeholder: "Oui : détecter quand la commande contient X et bloquer avec exit 2"

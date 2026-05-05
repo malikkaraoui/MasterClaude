@@ -1,0 +1,82 @@
+{
+  "name": "masterclaude",
+  "version": "0.1.0",
+  "description": "Runtime Claude Code autonome : master daemon LaunchAgent, bridge Telegram bidirectionnel, routing multi-projets, vault Peter, orchestration multi-agents. Usage personnel avancé — pas un harnais npm générique.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "copilot",
+    "github",
+    "config",
+    "ai",
+    "agent",
+    "prompt-engineering",
+    "llm",
+    "developer-tools",
+    "mcp",
+    "review-automation",
+    "vault",
+    "knowledge-graph"
+  ],
+  "author": "Malik Karaoui",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/malikkaraoui/MasterClaude.git"
+  },
+  "bugs": {
+    "url": "https://github.com/malikkaraoui/MasterClaude/issues"
+  },
+  "homepage": "https://github.com/malikkaraoui/MasterClaude#readme",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "bin": {
+    "masterclaude": "bin/cli.js",
+    "masterclaude-master": "bin/master.js"
+  },
+  "files": [
+    "index.js",
+    ".claude/",
+    "bin/",
+    "src/",
+    "scripts/",
+    "hooks/",
+    "test/",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "update-security": "node scripts/update-security.js",
+    "preversion": "node scripts/gen-help.js && node scripts/version-gate.js",
+    "postversion": "git push && git push --tags",
+    "validate:handoffs": "node test/validate-handoff.js --all",
+    "lint": "node test/lint-refs.js && node test/lint-length.js && node test/lint-hooks-manifest.js && node test/manifest-validator.js && node test/lint-npm-files.js && node test/lint-runtime-skills-sync.js",
+    "lint:npm-files": "node test/lint-npm-files.js",
+    "lint:runtime-skills": "node test/lint-runtime-skills-sync.js",
+    "lint:refs": "node test/lint-refs.js",
+    "lint:length": "node test/lint-length.js",
+    "lint:hooks-manifest": "node test/lint-hooks-manifest.js",
+    "manifest:sync": "node scripts/manifest-sync.js",
+    "manifest:validate": "node test/manifest-validator.js",
+    "doctor": "node test/doctor.js",
+    "test:hooks": "node test/hooks.js",
+    "test:merge": "node test/merge.js",
+    "test:apply-profile": "node test/apply-profile.js",
+    "test:pulse": "node test/pulse.js",
+    "test:vault": "node test/vault.js",
+    "test:vault-update": "node test/vault-update.js",
+    "test": "npm run lint && npm run doctor && npm run test:hooks && npm run test:merge && npm run test:apply-profile && npm run test:pulse && npm run test:vault && npm run test:vault-update && npm run test:telegram",
+    "test:telegram": "node test/telegram.test.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.9.0"
+  }
+}

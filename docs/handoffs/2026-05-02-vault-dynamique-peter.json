@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "subject": "Vault dynamique projet maintenu par Peter",
+    "date": "2026-05-02",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "58ea635..57e37a01f1f592118c3cf72ea7ec1ba988aee94a"
+  },
+  "from": {
+    "model": "github-copilot",
+    "context": "Ajout d'un MVP de vault dynamique projet dans claude-atelier. La commande `claude-atelier vault init` crée un dossier `vault/` par projet avec brief, mailbox, décisions, discoveries, roadmap, sources et charte Peter. Le hook `vault-context.sh` injecte au SessionStart un contexte court `[VAULT-PETER]` depuis `00-brief.md`, `10-mailbox.md` et `40-roadmap.md`, afin d'éviter de relire tout le repo et de réduire les tokens. README, manifest hooks, aide CLI, tests hooks et tests vault ont été mis à jour. Le range inclut aussi le commit précédent sur atelier-config/AskUserQuestion déjà présent sur main depuis le dernier handoff intégré.",
+    "question": "Quels sont les points fragiles ou manquants dans ce MVP de vault dynamique Peter, en particulier autour de l'installation du hook dans `.claude/settings.json`, de l'injection SessionStart et du risque de contexte vault obsolète ou trop volumineux ?",
+    "filesToRead": [
+      "bin/vault.js",
+      "hooks/vault-context.sh",
+      "bin/init.js",
+      "README.md",
+      ".claude/hooks-manifest.json",
+      "test/vault.js",
+      "test/hooks.js",
+      "docs/proposals/vault-dynamique-peter-mvp.md",
+      "docs/proposals/mirror-besoin-reel.md",
+      "src/features.json"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "Vérifier la cohérence avec le pattern Graphify : carte courte always-on, pas ingestion massive",
+      "Vérifier les risques de duplication de hooks ou de settings cassé",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "copilot-pull-request-reviewer",
+    "content": "Copilot a commenté la PR #35 le 2026-05-02 avec 3 points valides : 1) hooks/vault-context.sh n'expose pas la fraîcheur des fichiers injectés, donc Claude peut raisonner sur un brief/mailbox/roadmap obsolète ; ajouter la date de dernière modification pour chaque fichier. 2) test/vault.js ne couvre pas l'idempotence réelle de l'installation dans .claude/settings.json ; ajouter une assertion après deux vault init pour vérifier une seule occurrence de vault-context.sh dans hooks.SessionStart. 3) hooks/vault-context.sh tronque seulement au nombre de lignes ; une ligne très longue peut exploser le contexte SessionStart ; ajouter une limite dure en caractères/bytes ou une troncature par ligne.",
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans docs/handoffs/2026-05-02-vault-dynamique-peter.json.\""
+  },
+  "integration": {
+    "status": "applied",
+    "summary": "Corrections appliquées : le hook Peter affiche désormais la date de dernière modification de chaque fichier injecté, limite chaque fichier à 8000 caractères et chaque ligne à 500 caractères, et l'installation CLI détecte correctement les hooks déjà présents dans les entrées imbriquées de .claude/settings.json. Le test vault vérifie l'idempotence de l'installation du hook après deux exécutions.",
+    "filesChanged": [
+      "hooks/vault-context.sh",
+      "bin/vault.js",
+      "test/vault.js"
+    ],
+    "verification": [
+      "npm test — OK",
+      "bash scripts/pre-push-gate.sh — OK"
+    ]
+  }
+}

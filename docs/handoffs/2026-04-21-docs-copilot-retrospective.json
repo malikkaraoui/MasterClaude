@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "subject": "docs copilot-loop retrospective + fix validate-handoff + copilot-instructions",
+    "date": "2026-04-21",
+    "type": "review",
+    "priority": "normale",
+    "reviewedRange": "bfe479adf288d4bd8420ea055b113faacde11844..152db5f614e3be652fb5a85a24b2d132f83ece8e"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "PR #22 documente le rail de dev autonome Claude/Copilot, corrige le check firstIntegrated dans validate-handoff.js (equality → ancestry), et ajoute copilot-instructions.md pour forcer l'identification du modèle reviewer.",
+    "question": "La retrospective est-elle correcte (orthographe, cohérence avec le code actuel) ? La correction du check validate-handoff (is-ancestor) est-elle bien documentée ? Les instructions Copilot sont-elles claires pour forcer la signature du modèle ?",
+    "filesToRead": [
+      "test/validate-handoff.js",
+      "docs/COPILOT-LOOP-RETROSPECTIVE.md",
+      ".github/copilot-instructions.md",
+      "README.md"
+    ],
+    "constraints": [
+      "§5 anti-hallucination",
+      "§13 pas de Co-Authored-By",
+      "Cohérence FR orthographique dans tous les fichiers"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "6 problèmes détectés :\n\n1. ACCENTS validate-handoff.js ligne 125 : message d'erreur contient 'ancetre' et 'd integration' sans accents — incohérent avec le reste du fichier. Fix : 'ancêtre', 'd intégration'.\n\n2. ACCENTS validate-handoff.js ligne 211 : même problème pour le message JSON. Fix identique.\n\n3. TYPO retrospective ligne 11 : 'cassser' (3 s) → 'casser'.\n\n4. GRAMMAIRE retrospective ligne 29 : 'jusqu'à que' → 'jusqu'à ce que' (construction grammaticale incorrecte en français).\n\n5. DOC OBSOLÈTE retrospective ligne 238 : la section 'Ce qui bloque encore' décrit encore firstIntegrated == toSha comme impossible, alors que ce PR le corrige via merge-base --is-ancestor. Mettre à jour pour ne pas documenter un bug résolu.\n\n6. AMBIGUITÉ copilot-instructions.md ligne 9 : 'ligne exacte' + placeholder avec accolades peut induire un copier-coller littéral. Reformuler en 'format suivant' et donner un exemple concret sans accolades."
+  },
+  "integration": {
+    "date": "2026-04-21",
+    "model": "claude-sonnet-4-6",
+    "retained_implement": [
+      {
+        "point": "Accents manquants dans les messages d'erreur de validate-handoff.js",
+        "action": "Remplacer 'ancetre' par 'ancêtre' et 'd integration' par 'd intégration' aux lignes 125 et 211"
+      },
+      {
+        "point": "Typo 'cassser' dans la retrospective",
+        "action": "Corriger en 'casser' ligne 11 de COPILOT-LOOP-RETROSPECTIVE.md"
+      },
+      {
+        "point": "Grammaire 'jusqu'à que' incorrecte",
+        "action": "Remplacer par 'jusqu'à ce que' ligne 29 de la retrospective"
+      },
+      {
+        "point": "Section 'Ce qui bloque encore' décrit un bug résolu dans cette même PR",
+        "action": "Remplacer le bullet firstIntegrated == toSha par une note positive sur la correction via is-ancestor"
+      },
+      {
+        "point": "Ambiguité du placeholder dans copilot-instructions.md",
+        "action": "Reformuler 'ligne exacte' en 'format suivant', donner un exemple concret (gpt-4o) sans accolades"
+      }
+    ],
+    "retained_later": [],
+    "discarded": [],
+    "verdict": "Review orthographique et de cohérence précise. Le point le plus utile est la correction de la section 'Ce qui bloque encore' qui documentait un bug que cette PR elle-même résout — une contradiction embarrassante dans un document de référence."
+  }
+}

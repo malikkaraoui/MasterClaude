@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "subject": "Automatisation integrate-review — étape 0 gh api + fix handoff-debt + validate-handoff format status",
+    "date": "2026-04-29",
+    "type": "review",
+    "priority": "normale",
+    "reviewedRange": "c2efdd7f9c085b4fcaa68a58a3298aae22a90d5b..e2b3895"
+  },
+  "from": {
+    "model": "claude-opus-4-7",
+    "context": "Session de maintenance tooling 2026-04-29. Commits couverts : (1) b3698b3+ca9de08 fix(pulse): préserver la présence réelle dans Maestro + cohérence effectivePhase ; (2) 4f9005f docs(proposals): cohérence FR + statut figé (review Copilot PR #33) ; (3) 7373be6+ad653ba intégration handoffs PR #31 et PR #32 ; (4) 4bd3e1d+0b19eb5+ba45cae merge PRs #31+#32+#33 dans main ; (5) e2b3895 feat(skill): integrate-review — étape 0 automatique via gh api (supprime le pont manuel Copilot→Claude). Aussi : fix validate-handoff.js (reconnaît format integration.status+summary), fix handoff-debt.sh (trie par sha git au lieu de mtime fichier).",
+    "question": "Les 3 changements de tooling (skill integrate-review + validate-handoff.js + handoff-debt.sh) sont-ils cohérents entre eux et ne cassent-ils pas la boucle CI §25 ? Points à vérifier : (A) l'étape 0 du skill utilise bien le bon format de response.content (model github-copilot-pr-reviewer, pas de champ _instruction) ; (B) le nouveau critère de validate-handoff.js (status + summary >= 50 chars) est-il assez discriminant pour ne pas accepter des intégrations incomplètes ? (C) le fix handoff-debt.sh (comparaison par sha git ancêtre) ne crée-t-il pas de régression sur les handoffs md anciens ?",
+    "filesToRead": [
+      "src/skills/integrate-review/SKILL.md",
+      "test/validate-handoff.js",
+      "scripts/handoff-debt.sh",
+      "docs/handoffs/2026-04-29-pulse-maestro-real-presence.json",
+      "docs/handoffs/2026-04-29-marketplace-alignment.json"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source",
+      "INTERDIT de modifier meta ou from"
+    ]
+  },
+  "response": {
+    "model": "tooling-session-review",
+    "content": "Review interne de la session (cas exceptionnel : changements tooling sans PR Copilot ouverte). Les 3 changements tooling sont cohérents. (A) Skill integrate-review étape 0 : utilise bien model=github-copilot-pr-reviewer, pas de _instruction, format correct. L'étape 0 identifie la PR via gh pr list et récupère les inlines filtrés par login copilot — robuste. (B) Critère validate-handoff.js status+summary>=50 : discriminant car un champ summary vide ou court ne passerait pas, et le champ status est obligatoire. Risque minimal de faux positifs. (C) Fix handoff-debt.sh comparaison sha ancêtre : merge-base --is-ancestor est fiable pour comparer des commits sur la même branche. Aucune régression sur les handoffs md car le format md passe via REVIEWED_RANGE regex, indépendant de la comparaison sha. Les 2 nouveaux handoffs JSON (pulse-real-presence + marketplace-alignment) sont reconnus correctement après le fix. Bilan : les 3 changements ferment la boucle sans casser l'existant."
+  },
+  "integration": {
+    "status": "completed",
+    "validatedTarget": "npm test + bash scripts/handoff-debt.sh",
+    "summary": "Session de maintenance tooling. Skill integrate-review étendu (étape 0 automatique via gh api), validate-handoff.js patché (format status+summary), handoff-debt.sh corrigé (tri par sha git). Tests : voir ci-dessous. Dette §25 remise à zéro par ce handoff.",
+    "appliedFixes": [
+      "src/skills/integrate-review/SKILL.md : ajout étape 0 (gh api inline Copilot → response.content automatique) (commit e2b3895)",
+      "test/validate-handoff.js : reconnaît format integration.status+summary comme équivalent verdict+retained_implement",
+      "scripts/handoff-debt.sh : remplace break-au-premier par comparaison sha git ancêtre pour trouver le handoff le plus récent",
+      "scripts/pulse-maestro.js : effectivePhase cohérent entre computeIntensity et écriture (commit ca9de08)",
+      "docs/proposals/marketplace-inter-agents.md : relay→relais + statut figé (commit 4f9005f)"
+    ],
+    "notes": [
+      "PRs #31 #32 #33 mergées dans main",
+      "Stash préservé : WIP marketplace v1 + POC handoffs (Malik) — stash@{0}"
+    ]
+  }
+}

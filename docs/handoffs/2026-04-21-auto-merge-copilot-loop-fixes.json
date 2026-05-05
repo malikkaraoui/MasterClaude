@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "subject": "auto-merge configurable + fixes copilot-loop + review-copilot robustesse",
+    "date": "2026-04-21",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "bfecc43ca86ad44c8c66dc18b30663e6b496cb13..074918f7b0caff0daf933e028598349b5a10e3d4"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "4 commits feat/fix post-sprint : (1) fix: review-copilot — branche handoff/ + gh pr create (fin copier-coller VS Code, deadlock gate résolu). (2) fix: review-copilot — étape 1 exhaustive via git log SHA_FROM..HEAD --grep feat/fix pour éviter les trous mémoire. (3) feat: auto-merge configurable — nouveau groupe Copilot Loop dans features-registry avec flag auto_merge_after_review (défaut OFF), param merge_target_branch (défaut main), copilot_loop_poll_sec (300s), copilot_loop_max_attempts (12). Support type string ajouté dans bin/features.js pour les params non numériques. copilot-loop SKILL mis à jour pour lire ces params. (4) fix: intégration review Copilot #23 — chemins absolus → relatifs dans atelier-config.md, filesToRead corrigé vers hooks réels, note header_show_* reformulée.",
+    "question": "Deux risques à évaluer : (a) ScheduleWakeup perdu si session Claude se ferme — faut-il CronCreate pour la persistance inter-sessions ? (b) Support type string dans bin/features.js — cas limites non gérés (espaces, caractères spéciaux, valeur vide) ?",
+    "filesToRead": [
+      "src/skills/copilot-loop/SKILL.md",
+      "src/skills/review-copilot/SKILL.md",
+      "bin/features.js",
+      "src/features-registry.json"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "Deux risques confirmés. (a) ScheduleWakeup est session-scoped : si la session Claude se ferme (tab fermé, timeout), le réveil est perdu sans aucun signal. CronCreate crée des jobs persistants qui survivent à la fermeture de session — c'est le bon outil pour les loops overnight. La migration ScheduleWakeup→CronCreate dans copilot-loop est recommandée dès que le mode nuit est utilisé. (b) bin/features.js type string : val=raw prend args[setIdx+2] directement. Cas limites non gérés : (1) valeur avec espaces non quotée — le shell splitte et raw vaut seulement le premier token ; (2) valeur vide explicite ('') — le check !val l'intercepte mais sans message d'erreur clair ; (3) valeur contenant uniquement des espaces — !val passe (truthy) mais stocke une valeur inutilisable. Recommandation : ajouter val=raw.trim() et rejeter si vide après trim."
+  },
+  "integration": {
+    "retained_implement": "Deux actions concrètes à implémenter : (1) bin/features.js — ajouter val=raw.trim() + rejet explicite si vide après trim pour les params string. (2) copilot-loop SKILL — documenter la limitation ScheduleWakeup (session-scoped) et recommander CronCreate pour le mode nuit autonome.",
+    "verdict": "Review Copilot #24 intégrée. Les deux risques identifiés sont réels et actionnables. Le plus critique est la perte du réveil ScheduleWakeup en cas de fermeture de session — impacte directement le mode nuit. Fix string params est un correctif défensif de faible risque."
+  }
+}

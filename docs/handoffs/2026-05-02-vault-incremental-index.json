@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "subject": "vault update — index incrémental Peter Phase B",
+    "date": "2026-05-02",
+    "type": "review",
+    "priority": "moyenne",
+    "reviewedRange": "4dd3d77f5f4c40a0c24f4eca2623e1dae6a254a7..2faf46f4647180950819ffed074296c3d8119ce0"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Phase B de peter-vault-graphify-plus-plan.md. Phase A (0.23.4) avait livré : vault init/status/report/stale + hook SessionStart + PETER_REPORT.md. Phase B ajoute : (1) `vault update` — scan incrémental du repo avec SHA256 par fichier, respect .gitignore/.peterignore/.claudeignore, exclusion DEFAULT_IGNORE_DIRS (node_modules, .git, dist, build...) + répertoires internes Peter (vault/.peter, vault/index) ; (2) génération de vault/index/manifest.json {version, generatedAt, root, fileCount, files[]} ; (3) génération de vault/.peter/state.json {needsUpdate, health, fileCount, lastRun...} ; (4) création de vault/.peter/cache/ (vide Phase B, peuplé Phase C) ; (5) cache incrémental par mtime — skip les fichiers inchangés sans recalculer SHA256 ; (6) vault stale amélioré : check manifest.json avec status INFO (non bloquant) si Phase B non initialisée, STALE/WARN/OK si initialisée. 35 nouveaux tests dans test/vault-update.js (35/35). Commits du range : feat vault update Phase B + feat init vault projet + feat vault dynamique Peter (Phase A merge #35) + fix review Copilot #36.",
+    "question": "La logique de cache incrémental dans `updateVault()` (bin/vault.js ~L640-710) compare uniquement la mtime ISO string pour décider si le SHA256 doit être recalculé. Est-ce suffisant comme critère d'incrémentalité, ou y a-t-il un risque de faux-négatifs (fichier modifié mais même mtime) en pratique Node.js/macOS ? Et le calcul de `deletedCount` (L~710 : `(oldManifest?.fileCount ?? 0) - (files.length - newCount)`) est-il correct ou peut-il retourner une valeur erronée dans certains cas ?",
+    "filesToRead": [
+      "bin/vault.js",
+      "test/vault-update.js",
+      "test/vault.js",
+      "docs/proposals/peter-vault-graphify-plus-plan.md"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "## Review Copilot PR #37 — vault update Phase B\n\n### Vue d'ensemble\nLa PR implémente correctement la Phase B de Peter vault : scan incrémental SHA256, manifest.json, state.json, cache/, respect des fichiers ignore. La suite de tests (35 cas) couvre bien les cas nominaux. Trois points à adresser :\n\n### Point 1 — Cache incrémental mtime : risque de faux-négatifs\nLa comparaison mtime ISO string (`old.mtime === mtime`) est un proxy raisonnable mais imparfait. Sur macOS avec APFS (résolution nanoseconde), des modifications rapides (touch + write < 1ms) peuvent partager le même mtime. En pratique Node.js/macOS, la précision de `stat.mtime` via `statSync` est de l'ordre de la milliseconde via `mtimeMs`. Pour une détection plus robuste à terme, envisager de comparer également la taille (`stat.size !== old.size`) comme signal complémentaire. Pour Phase B, le compromis est acceptable : les cas à risque sont rares en usage réel (génération de fichiers programmatique très rapide). Pour Phase C (extraction de contenu), ajouter la comparaison de taille.\n\n### Point 2 — Calcul deletedCount potentiellement erroné\nLe calcul actuel : `(oldManifest?.fileCount ?? 0) - (files.length - newCount)` peut retourner une valeur incorrecte. Exemple : si oldManifest.fileCount=10, 9 fichiers scannés (8 unchanged + 1 modifié = 0 new), deletedCount = 10 - (9 - 0) = 1. Correct. Mais si on supprime 2 fichiers et ajoute 1 nouveau : oldManifest.fileCount=10, 9 fichiers scannés (8 unchanged + 1 new), deletedCount = 10 - (9 - 1) = 2. Correct. Le calcul est algébriquement juste mais dépend du fait que `files.length - newCount` == nombre de fichiers présents dans l'ancien manifeste. Un test dédié (suppression d'un fichier indexé) manquait — fix : ajouter test 18 dans test/vault-update.js.\n\n### Point 3 — .claude/settings.json chemin absolu\nLe commit 89cb8cf ajoute un hook dans .claude/settings.json avec un chemin absolu spécifique à la machine (`/Users/malik/Documents/ATELIER PROJETS/.../hooks/vault-context.sh`). Ce chemin révèle un path local et ne fonctionnera pas sur d'autres machines ou en CI. Fix : modifier `installPeterHook()` dans bin/vault.js pour utiliser `relative(cwd, projectHook)` au lieu du chemin absolu, et corriger l'entrée existante dans .claude/settings.json en `bash \"hooks/vault-context.sh\"`.",
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans docs/handoffs/2026-05-02-vault-incremental-index.json.\""
+  },
+  "integration": {
+    "date": "2026-05-03",
+    "retained_implement": [
+      "Fix test/vault-update.js : ajout test 18 — vault update détecte un fichier supprimé (deletedCount >= 1) + vérification state.json.deletedFiles >= 1",
+      "Fix bin/vault.js installPeterHook : utilisation de relative(cwd, projectHook) au lieu du chemin absolu — hook maintenant portable entre machines",
+      "Fix .claude/settings.json : chemin absolu remplacé par 'hooks/vault-context.sh' (relatif à la racine projet)"
+    ],
+    "deferred": [
+      "Cache incrémental mtime : ajouter comparaison size comme signal complémentaire en Phase C lors de l'extraction de contenu — pour Phase B le compromis est acceptable",
+      "Le deletedCount via formule algébrique est correct ; un test dédié a été ajouté pour le valider explicitement"
+    ],
+    "verdict": "Review Copilot PR #37 intégrée : 3 fixes appliqués (test deletedCount, hook chemin relatif, settings.json nettoyé). npm test 37/37 passing. 2 points mineurs différés Phase C. PR prête à merger dans main."
+  }
+}

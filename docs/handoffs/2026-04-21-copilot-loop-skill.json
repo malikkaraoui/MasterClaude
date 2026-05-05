@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "subject": "copilot-loop skill — bugs détectés par Copilot PR #21",
+    "date": "2026-04-21",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "4867a5ffc497dcd335698216e6821e76b5f44a7d..7768fcc0bf94c401f882b8bd0c9186f59bb8510f"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Skill copilot-loop créée pour la boucle autonome PR → Copilot review → handoff JSON → fixes → merge. Premier test en conditions réelles via PR #21.",
+    "question": "La skill copilot-loop est-elle correcte : gestion du repo owner/name, cohérence de la mention §25 avec la procédure effective, complétude des champs handoff documentés pour passer validate-handoff.js ?",
+    "filesToRead": [
+      "src/skills/copilot-loop/SKILL.md",
+      ".claude/skills/copilot-loop/SKILL.md",
+      "test/validate-handoff.js",
+      "docs/handoffs/_template.json"
+    ],
+    "constraints": [
+      "§5 anti-hallucination : ne corriger que les bugs confirmés",
+      "§13 : pas de Co-Authored-By dans les commits",
+      "Les deux copies src/ et .claude/ doivent rester synchronisées"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "3 bugs identifiés dans la skill copilot-loop :\n\n1. REPO HARD-CODÉ : Le prompt de réveil contient `Repo: malikkaraoui/claude-atelier` (valeur fixe) puis utilise `[OWNER]/[REPO]` comme placeholder dans les commandes gh api. Incohérence qui cassera sur tout fork ou repo renommé. Fix : dériver le repo via `gh repo view --json nameWithOwner -q .nameWithOwner` à l'étape 1 et l'injecter dans le prompt de réveil.\n\n2. MENTION §25 INCORRECTE : La description annonce `gate §25 → merge main` mais la procédure ne lance jamais `scripts/pre-push-gate.sh` ni `scripts/handoff-debt.sh --check`. `gh pr merge` opère côté GitHub, contournant l'enforcement locale §25. Fix : soit supprimer `gate §25` du texte descriptif (merge GitHub n'a pas de gate locale), soit ajouter un check explicite avant le merge.\n\n3. CHAMPS HANDOFF INCOMPLETS : L'étape 2.b liste seulement `response.model`, `response.content`, `integration.retained_implement`, `integration.verdict`. Or `test/validate-handoff.js` exige aussi : `meta.date`, `meta.type`, `meta.reviewedRange` (sha..sha valides dans git), `from.question` (≥50 chars), `from.filesToRead` (≥1 fichier réel), et `integration` total ≥100 chars. Fix : documenter que le loop doit partir du template complet (`_template.json`) et préciser les champs minimum requis."
+  },
+  "integration": {
+    "date": "2026-04-21",
+    "model": "claude-sonnet-4-6",
+    "retained_implement": [
+      {
+        "point": "Repo hard-codé dans le prompt de réveil",
+        "action": "À l'étape 1, ajouter `REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)` et remplacer `Repo: malikkaraoui/claude-atelier` par `Repo: [REPO]` dans le template de prompt"
+      },
+      {
+        "point": "Mention §25 incorrecte dans la description",
+        "action": "Supprimer `gate §25 →` du texte descriptif ligne 13 : garder `PR feature → Copilot review automatique → handoff JSON → fixes → merge main` (gh pr merge opère côté GitHub, la gate locale ne s'applique pas)"
+      },
+      {
+        "point": "Champs handoff incomplets documentés à l'étape 2.b",
+        "action": "Préciser que le loop doit partir du template `_template.json` (tous les champs meta/from pré-remplis) et documenter les champs minimum : meta.date, meta.type, meta.reviewedRange, from.question ≥50 chars, from.filesToRead ≥1 fichier"
+      }
+    ],
+    "retained_later": [],
+    "discarded": [],
+    "verdict": "Review Copilot précise et actionnable sur 3 vrais bugs. Le plus critique est le repo hard-codé qui casserait silencieusement sur tout fork — à corriger en priorité."
+  }
+}

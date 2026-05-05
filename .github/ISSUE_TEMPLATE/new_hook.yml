@@ -1,0 +1,53 @@
+name: "🪝 Proposition de Hook"
+description: "Proposer un nouveau hook d'enforcement (Hookify)"
+labels: ["enhancement", "hook"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        L'atelier transforme les erreurs répétées en rails d'enforcement.
+        Tu as identifié un pattern ? Propose un hook.
+
+  - type: textarea
+    id: error
+    attributes:
+      label: L'erreur observée
+      description: "Quel comportement problématique de Claude Code as-tu observé ?"
+      placeholder: "Claude fait X alors qu'il devrait faire Y"
+    validations:
+      required: true
+
+  - type: input
+    id: frequency
+    attributes:
+      label: Fréquence
+      description: "Combien de fois as-tu observé ce problème ?"
+      placeholder: "3+ fois dans la même session"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hook_type
+    attributes:
+      label: Type de hook
+      description: "Quel hook conviendrait ?"
+      options:
+        - PreToolUse (bloquer avant exécution)
+        - PostToolUse (alerter après exécution)
+        - UserPromptSubmit (injecter du contexte)
+        - Je ne sais pas
+    validations:
+      required: true
+
+  - type: textarea
+    id: detection
+    attributes:
+      label: Pattern de détection
+      description: "Comment un script bash pourrait détecter ce problème ?"
+      placeholder: "grep -qi 'pattern' dans la commande ou le fichier modifié"
+
+  - type: textarea
+    id: action
+    attributes:
+      label: Action souhaitée
+      description: "Que doit faire le hook ? Bloquer (exit 2) ? Alerter ? Injecter du contexte ?"

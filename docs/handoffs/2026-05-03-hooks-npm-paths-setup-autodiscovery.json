@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "subject": "Correction chemins hooks machine-spécifiques + CLI npm + auto-découverte §0",
+    "date": "2026-05-03",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "d318c8484dc2fde7b3583422c82d3c6810b8f3f5..0dc60549e018408246239a4814e2fdcfd92d3e93"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "3 bug fixes critiques pour les 7000+ utilisateurs npm de claude-atelier.\n\n1. fix(cbb9308): init/update régénèrent toujours les hooks — La guard `if (!merged.hooks)` dans init.js empêchait la régénération des hooks si settings.json en avait déjà. Résultat : après `npm install` dans un nouveau projet, les hooks pointaient vers l'ancien chemin dev. Corrigé en extrayant `generateHooksSection()` dans `bin/hooks-gen.js` (module partagé) et en forçant la régénération systématique dans init.js et update.js.\n\n2. fix(5f0edc1): remplacer `node bin/cli.js` par `claude-atelier` — Les fichiers `bin/features.js` et `.claude/commands/atelier-config.md` contenaient des appels `node bin/cli.js features` qui ne fonctionnent que sur la machine de dev. Les utilisateurs npm n'ont pas ce chemin. Remplacé par `claude-atelier features` (CLI npm global).\n\n3. feat(0dc6054): atelier-setup auto-découverte §0 — La skill `atelier-setup` posait 3 questions manuelles (nom projet, stack, repo). Remplacé par détection automatique via package.json, go.mod/Cargo.toml/etc., `git remote get-url origin`, et enrichissement QMD optionnel. Affiche les valeurs [AUTO] et demande validation avant écriture §0.",
+    "question": "La stratégie de régénération forcée des hooks dans hooks-gen.js est-elle suffisamment robuste pour tous les cas d'installation npm (global --global, local projet, mise à jour via `claude-atelier update`) ? Y a-t-il des cas limites non couverts, notamment quand hooksDir ou scriptsDir n'existent pas encore au moment de la génération ?",
+    "filesToRead": [
+      "bin/hooks-gen.js",
+      "bin/init.js",
+      "bin/update.js",
+      "bin/features.js",
+      ".claude/commands/atelier-config.md",
+      "src/skills/atelier-setup/SKILL.md",
+      ".claude/skills/atelier-setup/SKILL.md"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "Review Copilot PR #42 — 8 commentaires identifiés, 4 catégories de bugs.\n\n**Bug 1 — basename non quoté (SKILL.md x2)** : `basename $(git rev-parse --show-toplevel || pwd)` casse si le chemin contient des espaces. Fix : `basename \"$(...)\"`. Impact : auto-découverte nom projet incorrecte sur chemins avec espaces.\n\n**Bug 2 — glob *.swift non expandé (SKILL.md x2)** : `[ -f \"$file\" ]` avec `$file='*.swift'` teste littéralement le fichier '*.swift' — glob non expandé. iOS ne sera jamais détecté. Fix : `compgen -G '*.swift' > /dev/null 2>&1` ou branche case spéciale sans quotes.\n\n**Bug 3 — commandes CLI sans npx (atelier-config.md)** : `claude-atelier features --on/--off/--toggle/--reset` suppose install globale. Utilisateurs avec install locale (non-global) cassés. Fix : `npx claude-atelier features ...`.\n\n**Bug 4 — handoff JSON validator (intégration)** : `response.content` et `integration` null → `validate-handoff.js` échoue (min 100 chars requis). Fix : renseigner les deux champs avant merge.\n\n**Sur la question hooks-gen.js robustesse** : la stratégie de régénération forcée est correcte dans l'ensemble. Un cas limite non couvert : si `hooksDir` n'existe pas au moment de la génération (install fraîche sans `init` préalable), les chemins absolus générés sont invalides jusqu'au prochain `init`. Le guard devrait vérifier l'existence de `hooksDir` avant d'écrire."
+  },
+  "integration": {
+    "retained_implement": [
+      "fix: basename quoté dans les deux SKILL.md (src/ et .claude/)",
+      "fix: détection iOS via compgen -G '*.swift' au lieu de [ -f '$file' ] avec glob",
+      "fix: commandes atelier-config.md → npx claude-atelier features ... pour portabilité install locale",
+      "fix: handoff JSON response.content et integration renseignés"
+    ],
+    "rejected": [],
+    "verdict": "4 bugs réels confirmés par Copilot et corrigés. La remarque sur hooksDir est valide mais différée Phase D (cas rare : install sans init préalable est documentée comme prérequis). La stratégie de régénération forcée hooks-gen.js est correcte pour les cas d'usage nominaux (init + update). Aucune réécriture de ce qui fonctionne — fixes chirurgicaux uniquement."
+  }
+}

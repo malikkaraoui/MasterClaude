@@ -1,0 +1,5 @@
+role: cyber
+ttl: 120
+ceiling: 1.0
+base: 0.4
+description: "Cyber — on-call, peut monter jusqu'à critique"

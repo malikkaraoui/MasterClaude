@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "subject": "Pulse & Maestro v0.23.0 — système de présence multi-agents",
+    "date": "2026-04-28",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "f444ff0c7351a09b5a0f513116732b321421228e..562ad6b4698a0000e192f22a28a9df26440505c5"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Implémentation complète de la feature Pulse & Maestro (v0.22.0 → v0.23.0). 32 fichiers, +3093/-20 lignes. Commits feat/fix couverts : (1) 45dc4ba feat(pulse): templates YAML de rôles (dev/secretary/marketing/cyber/ops) ; (2) bc87f5c feat + d7b3d85 fix: src/pulse/parse.js (parsePoulsMd, isExpired, ageSeconds) ; (3) 842d67b feat: src/pulse/intensity.js (computeIntensity, intensityToStatus, profils) ; (4) 81be79e feat + 942e8e4 fix: src/pulse/write.js (serialisePoulsMd, YAML string safety) ; (5) e01a9e3 feat: src/pulse/format.js + i18n FR/EN (statusLabel, pulseIndicator, renderStatusTable) ; (6) e671bc8 feat: feature flags pulse + pulse_header dans features-registry ; (7) c31b50e feat + bcc1500 fix: hooks/stop-pulse.sh + scripts/pulse-update.js (Stop hook session) ; (8) e9f4fb2 feat + 814798e fix: hooks/start-maestro.sh + scripts/pulse-maestro.js + injection [PULSE] dans model-metrics.sh ; (9) 80307bc feat + b0c71d1 fix + 8240290 fix: bin/pulse.js CLI (status/init/update/list, --role/--expired filters, try-catch, sanitizeHostname) ; (10) 725fb22 feat: routing commande pulse dans bin/cli.js ; (11) a3e30bc feat: prompt langue interactif dans bin/init.js + atelier-config.json + fix post-install-checks imports ; (12) 25672b5 feat: test:pulse dans package.json + HELP régénéré ; (13) e55922f fix: start-maestro + stop-pulse ajoutés au hooks-manifest ; (14) e8a9eca feat: §0 v0.23.0 + §1 pastille pulse + README Pulse table + validator type Stop.",
+    "question": "Le système Maestro/Pulse repose sur des fichiers pouls.md en filesystem pour la présence multi-agents. Deux angles morts potentiels : (A) scripts/pulse-maestro.js met à jour *tous* les agents au SessionStart — si 10+ agents existent et que le script plante à mi-parcours, l'état est partiellement corrompu sans rollback. Y a-t-il une protection contre ce cas ? (B) bin/pulse.js init crée un fichier pouls.md scoppé par hostname sanitisé, mais si deux agents ont des hostnames qui se réduisent au même slug après sanitisation, ils écrasent mutuellement leur fichier de présence. Est-ce que le schéma actuel (agentId = 'claude-code/<hostname>') est suffisamment discriminant, ou faut-il un suffixe UUID de session ?",
+    "filesToRead": [
+      "scripts/pulse-maestro.js",
+      "scripts/pulse-update.js",
+      "bin/pulse.js",
+      "src/pulse/parse.js",
+      "src/pulse/intensity.js",
+      "src/pulse/write.js",
+      "src/pulse/format.js",
+      "hooks/start-maestro.sh",
+      "hooks/stop-pulse.sh",
+      "test/pulse.js"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}

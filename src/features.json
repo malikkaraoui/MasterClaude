@@ -1,0 +1,70 @@
+{
+  "commands": [
+    {
+      "name": "init",
+      "description": "Installe la config dans ./.claude/ (ou ~/.claude/ avec --global)",
+      "flags": ["--global", "--lang <fr|en>", "--dry-run"]
+    },
+    {
+      "name": "update",
+      "description": "Met à jour la config en préservant §0 et les customisations projet",
+      "flags": ["--global", "--dry-run"]
+    },
+    {
+      "name": "doctor",
+      "description": "Vérifie l'intégrité de l'installation",
+      "flags": []
+    },
+    {
+      "name": "lint",
+      "description": "Valide les références markdown et la longueur du core CLAUDE.md",
+      "flags": []
+    },
+    {
+      "name": "features",
+      "description": "Tableau de contrôle des features (on/off par feature)",
+      "flags": ["--on <feature>", "--off <feature>", "--toggle <feature>", "--reset", "--global"]
+    },
+    {
+      "name": "review-local",
+      "description": "Review automatique d'un handoff via Ollama local (anti-bypass auto-review Claude)",
+      "flags": ["--model <nom>", "--handoff <path>", "--auto-integrate", "--list-models"]
+    },
+    {
+      "name": "pulse",
+      "description": "Gestion du pouls multi-agents (statut, init, mise à jour)",
+      "flags": [
+        "--role <secretary|dev|marketing|cyber|ops>",
+        "--json",
+        "--expired",
+        "--lang <fr|en>",
+        "--global"
+      ]
+    },
+    {
+      "name": "vault",
+      "description": "Initialise et inspecte le vault dynamique projet maintenu par Peter",
+      "flags": ["init", "status", "report", "stale", "update", "graph", "query \"<texte>\"", "--cwd <path>", "--dry-run", "--json"]
+    },
+    {
+      "name": "apply",
+      "description": "Injecte un profil de config dans un worktree cible (API Paperclip)",
+      "flags": ["--profile <full|lean|review-only>", "--cwd <path>", "--merge <repo-wins|atelier-wins>", "--yes", "--dry-run"]
+    }
+  ],
+  "options": [
+    { "flag": "--version, -v", "description": "Affiche la version et quitte" },
+    { "flag": "--help, -h", "description": "Affiche l'aide et quitte" },
+    { "flag": "--global", "description": "Cible la config globale (~/.claude/) au lieu du projet" },
+    { "flag": "--lang <fr|en>", "description": "Langue (défaut : fr)" }
+  ],
+  "highlights": [
+    "Runtime bilingue FR/EN avec règles de code et orchestration",
+    "Gates de sécurité : secrets, lint, tests, pre-push",
+    "Routing automatique Haiku/Sonnet/Opus selon la tâche",
+    "Skills slash commands (/handoff, /angle-mort, /token-routing…)",
+    "Hooks : horodatage, métriques, garde-fous commits",
+    "Système de présence multi-agents (pouls.md) avec Maestro §0 watcher",
+    "Bridge Telegram bidirectionnel : commandes mobile + alertes FIFO temps réel (O_NONBLOCK)"
+  ]
+}

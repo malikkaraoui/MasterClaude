@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "subject": "Telegram Bridge Phase A — service Python, sessions SQLite, CLI npx, smoke tests",
+    "date": "2026-05-04",
+    "type": "review",
+    "priority": "normale",
+    "reviewedRange": "75ad7ea5682b0cb241ab09e6a1375d6770f5a881..facca3bd586ccbc56d8ef51308edeae2bc6a9234"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Session chantier Peter — Telegram bridge Phase A livrée. Service Python (bridge.py) avec sessions SQLite, gestion multi-utilisateurs, proxy vers Claude CLI subprocess. CLI npx start/stop/status/test. Template .env (TELEGRAM_BOT_TOKEN, CLAUDE_PATH, SQLITE_PATH). Documentation mode nuit FIFO vault. 13 smoke tests passants. Fichiers modifiés : telegram-bridge/bridge.py, telegram-bridge/cli.js, telegram-bridge/.env.template, docs/autonomy/telegram-bridge.md.",
+    "question": "Le service Telegram bridge Phase A est-il cohérent ? Le mode nuit FIFO vault est-il documenté correctement ? Les 13 smoke tests couvrent-ils les cas nominaux ?",
+    "filesToRead": [
+      "telegram-bridge/bridge.py",
+      "telegram-bridge/cli.js"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "copilot-pull-request-reviewer",
+    "content": "Review Telegram Bridge Phase A : service cohérent. Bridge Python sessions SQLite isolées par user_id, aucun état partagé entre sessions. CLI npx start/stop/status avec PID file idempotent (stop sans daemon retourne message propre). Template .env complet avec valeurs par défaut documentées. Mode nuit FIFO vault : documentation correcte, commandes vault watch start déclenchées via cron autonome. Smoke tests 13/13 couvrent nominal (start/stop/status/test), edge (double start, stop sans daemon, token manquant). Point de vigilance : bridge.py utilise subprocess Claude CLI — latence accrue si Claude CLI absent du PATH. Recommandation : ajouter check PATH au démarrage et warning explicite.",
+    "_instruction": "Écrire la réponse dans le champ 'content' de ce fichier JSON. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": {
+    "retained_implement": [
+      "Ajouter check PATH Claude CLI au démarrage du bridge avec warning explicite si absent",
+      "Documenter la limitation latence subprocess dans README telegram-bridge",
+      "Ajouter test smoke pour cas CLAUDE_PATH incorrect"
+    ],
+    "verdict": "Telegram Bridge Phase A livrée et fonctionnelle. 13 smoke tests passants. Service Python cohérent, sessions SQLite isolées, CLI npx idempotent. Documentation mode nuit FIFO vault correcte. Aucun bug bloquant identifié. Prêt pour Phase B (webhooks, multi-projets)."
+  }
+}

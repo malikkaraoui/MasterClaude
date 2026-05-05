@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "subject": "Peter Lots 1+2+3+5+8 — docs classify, graph v2, path/explain, watch daemon, exports multi-formats",
+    "date": "2026-05-04",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "fe048270b2c65b770b52af75bcfcf6f8ade57d9c..75ad7ea5682b0cb241ab09e6a1375d6770f5a881"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Session chantier Peter — 5 lots livrés en parallèle via worktrees (PRs #44, #45, #46 mergées). Lot 3 : vault path (BFS), vault explain, calcul communautés connexes. Lot 1+2 : vault docs scan/classify/organize, détection BMAD stricte, catalog.json/protected.json/migrations.json, enrichissement graphe v2 (doc_category, risk, question, arêtes classified_as). Lot 5 : vault watch start/stop/status/once, daemon polling incrémental avec PID, hooks git post-commit/post-checkout/pre-push. Lot 8 : vault export avec 6 formats (HTML D3 interactif, Obsidian, wiki, SVG circulaire, GraphML, Neo4j Cypher). Total : +~2500 lignes dans bin/vault.js, 67 tests passants. Conflits de merge sur test/vault.js résolus (marqueurs HEAD orphelins supprimés).",
+    "question": "Les 5 lots livrés (docs scan/classify, graph v2 enrichi, path/explain/communautés, watch daemon, exports multi-formats) sont-ils cohérents entre eux ? Les gardes BMAD dans vault docs organize sont-elles suffisamment strictes pour ne jamais déplacer un artefact protégé ? Le daemon watch est-il idempotent (double start, stop sans daemon actif) ? Les exports sont-ils rejouables sans effets de bord ?",
+    "filesToRead": [
+      "bin/vault.js",
+      "test/vault.js",
+      "src/vault/watch.js"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "copilot-pull-request-reviewer",
+    "content": "Review Copilot (auto-intégration §25) : les 5 lots sont cohérents. Gardes BMAD : protected:true bloque tout déplacement dans organize --apply, aucun fichier vault/ ni .claude/ n'est touché. Daemon watch : watchStatus() vérifie PID via process.kill(pid,0) avant d'affirmer actif, stop sans daemon retourne message propre sans crash. Exports : toutes les fonctions écrivent dans vault/index/ et sont idempotentes (écrasement silencieux). Communautés : calcul composantes connexes BFS, chaque nœud isolé obtient sa propre communauté, stats enrichies. Migrations.json : généré en lecture seule par organize --plan, aucun déplacement sans --confirm. Point de vigilance : le rebase a laissé des marqueurs HEAD orphelins dans test/vault.js qui ont été supprimés manuellement — à vérifier en CI que aucun autre fichier n'est affecté.",
+    "_instruction": "Écrire la réponse dans le champ 'content' de ce fichier JSON. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": {
+    "retained_implement": [
+      "Surveiller les markers de conflit dans les fichiers après rebase — ajouter un check lint dans test/lint-refs.js ou pre-push-gate",
+      "vault docs organize --apply : ajouter un test de non-régression vérifiant qu'aucun fichier vault/ n'est jamais déplacé même avec --confirm",
+      "vault watch : documenter la limitation polling (pas de fs.watch natif) dans le README vault"
+    ],
+    "verdict": "Les 5 lots Lot 1/2/3/5/8 sont livrés et fonctionnels. 67 tests passants. Aucun bug bloquant identifié. Les gardes BMAD et les gardes watch sont correctes. Conflit de merge test/vault.js résolu. Version bump v0.23.11 prête."
+  }
+}

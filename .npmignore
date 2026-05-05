@@ -1,0 +1,12 @@
+.claude/worktrees/
+.claude/.backup-*/
+*.jsonl
+
+# MasterClaude scope — exclu du package npm claude-atelier
+bin/master.js
+bin/telegram.js
+src/master/
+scripts/telegram-bridge.py
+scripts/mailbox-watcher.sh
+scripts/claude-notify.sh
+src/templates/telegram.env.example

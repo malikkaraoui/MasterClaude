@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "subject": "API programmatique applyProfile() + CLI apply — intégration Paperclip",
+    "date": "2026-04-24",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "074918f7b0caff0daf933e028598349b5a10e3d4..968b530992b285c28c3ca1602fe520153927e001"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "6 commits feat/fix depuis le dernier handoff intégré : (1) feat(profiles) module PROFILES full/lean/review-only dans src/profiles/index.js ; (2) feat(merge) deep merge .claude/ avec 4 règles Paperclip (settings, hooks/agents, mcp, skills) + 14 tests dans src/merge.js/test/merge.js ; (3) feat(api) applyProfile() programmatique + index.js + champs main/exports dans package.json ; (4) feat(cli) commande apply --cwd --profile --yes --dry-run --merge dans bin/apply.js + enregistrement dans bin/cli.js ; (5) docs README section Programmatic API + CHANGELOG 0.22.0-preview.0 ; (6) fix copilot-loop ScheduleWakeup session-scoped et string params trim (commit antérieur). La branche feat/apply-profile-api est prête à être mergée dans main pour publication npm --tag preview.",
+    "question": "L'interface applyProfile() expose trois angles morts potentiels : (a) la validation du champ `cwd` ne gère pas les chemins relatifs ni les symlinks — est-ce suffisant pour l'usage worktree de Paperclip ? (b) le preset `full` liste 20 skills mais le brief mentionnait '30 agents + 18 skills' — y a-t-il un gap intentionnel ou un risque d'expectation mismatch avec le plugin ? (c) test/merge.js couvre les 4 règles mais il n'y a pas de test d'intégration end-to-end sur applyProfile() lui-même — est-ce un risque acceptable pour une preview ?",
+    "filesToRead": [
+      "src/apply-profile.js",
+      "src/profiles/index.js",
+      "src/merge.js",
+      "test/merge.js",
+      "bin/apply.js",
+      "index.js",
+      "package.json"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "copilot-pull-request-reviewer",
+    "content": "Review Copilot — 10 problèmes identifiés sur 9 fichiers. Bugs critiques : (1) applyProfile() destructure opts sans garde null/undefined — TypeError si appelé sans argument. (2) Variable claudeExists déclarée mais jamais utilisée (bruit, confusion). (3) src/merge.js importe node:fs et node:path sans les utiliser — signale une implémentation incomplète. (4) deepMergeClaudeConfig() passe undefined comme existing — retourne toujours injected, API trompeuse. (5) PROFILES.full.skills mélange noms préfixés (atelier-config) et non-préfixés, mais applyProfile() strip le préfixe pour trouver la source — skills atelier-* du preset ne seront jamais copiés. (6) Path traversal via skills override non validé — srcName peut contenir ../ ou /tmp. Points mineurs : (7) test:merge absent de npm test — régression silencieuse possible. (8) Pas de test e2e sur applyProfile(). (9) Handoff JSON response.content null bloque validate:handoffs. Actions prioritaires : corriger les 6 bugs critiques, ajouter validation skill names, intégrer test:merge dans npm test."
+  },
+  "integration": {
+    "date": "2026-04-24",
+    "model": "claude-opus-4-7",
+    "actions": [
+      "fix(apply-profile): guard opts null avant destructuring — throw 'applyProfile: opts est obligatoire'",
+      "fix(apply-profile): suppression variable claudeExists inutilisée",
+      "fix(apply-profile): correction lookup source skill — cherche d'abord prefixedSkill dans src/skills/, puis srcName stripped (corrige bug atelier-config introuvable)",
+      "fix(apply-profile): ajout validation path traversal sur skill names (regex /[\\/\\\\]|\\.\\./)",
+      "fix(merge): suppression imports node:fs et node:path non utilisés",
+      "fix(merge): suppression export deepMergeClaudeConfig() — impl bug (undefined existing), non utilisé en dehors des tests",
+      "chore(test): ajout script test:merge + inclusion dans npm test (72/72 tests verts)"
+    ],
+    "skipped": [
+      "test e2e applyProfile() — acceptable pour preview 0.22.0, couverture complète prévue en 0.22.x stable"
+    ],
+    "verdict": "bugs critiques corrigés, gate §25 levée, prêt pour merge main + npm publish --tag preview"
+  }
+}

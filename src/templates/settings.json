@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "Template claude-atelier consolide (ex §15 env + §23 permissions). A copier dans .claude/settings.json (projet) ou ~/.claude/settings.json (global). Ajuster maxBudgetUsd et permissions selon le niveau d'autonomie voulu.",
+
+  "env": {
+    "MAX_THINKING_TOKENS": "10000",
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "haiku",
+    "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1"
+  },
+
+  "permissions": {
+    "defaultMode": "default",
+
+    "_comment_allow": "Liste blanche pour le mode 'acceptEdits' (nuit). Garde 'default' pour le dev interactif.",
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(npm run:*)",
+      "Bash(npm test:*)",
+      "Bash(npm ci:*)",
+      "Bash(pnpm run:*)",
+      "Bash(pnpm test:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)"
+    ],
+
+    "_comment_deny": "Liste noire absolue. Jamais autorisee, peu importe le mode. git push absent ici : interdit en night-mode via settings projet, pas globalement.",
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(git filter-repo:*)",
+      "Bash(curl * | sh:*)",
+      "Bash(curl * | bash:*)",
+      "Bash(wget * | sh:*)",
+      "Bash(wget * | bash:*)"
+    ]
+  },
+
+  "preferences": {
+    "_comment_budget": "Disjoncteur hard. Claude stoppe automatiquement au-dela.",
+    "maxBudgetUsd": 20
+  }
+}

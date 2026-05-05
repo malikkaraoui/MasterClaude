@@ -1,0 +1,375 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "description": "Manifeste typé de tous les hooks claude-atelier. Source de vérité — toute modif d'un hook doit synchroniser cette entrée. Vérifié par test/lint-hooks-manifest.js.",
+  "lastUpdated": "2026-05-04",
+  "hooks": [
+    {
+      "name": "_parse-input",
+      "file": "hooks/_parse-input.sh",
+      "type": "helper",
+      "trigger": null,
+      "purpose": "Helper partagé — parse le JSON stdin des hooks Claude Code en variables shell",
+      "exposes": [
+        "HOOK_COMMAND",
+        "HOOK_EXIT_CODE",
+        "HOOK_FILE_PATH",
+        "HOOK_MODEL",
+        "HOOK_PROMPT",
+        "HOOK_SESSION_ID",
+        "HOOK_TRANSCRIPT_PATH",
+        "HOOK_SOURCE"
+      ],
+      "rule": null,
+      "test": null,
+      "exitCodes": {
+        "0": "always (sourced, never executed standalone)"
+      },
+      "sha256": "c732f4dcb16d3c13"
+    },
+    {
+      "name": "session-model",
+      "file": "hooks/session-model.sh",
+      "type": "SessionStart",
+      "trigger": "session.start",
+      "purpose": "Capture le modèle actif au démarrage et le persiste dans un cache scoppé par session pour les hooks suivants",
+      "inputs": [
+        "model (from session JSON)"
+      ],
+      "outputs": [
+        "writes /tmp/claude-atelier-model-cache/<session>.model",
+        "writes /tmp/claude-atelier-current-model (fallback legacy)"
+      ],
+      "rule": "§1 Horodatage + Modèle",
+      "test": "test/hooks.js → session-model.sh + routing-check.sh (garde-fous compact + cache scoppé)",
+      "exitCodes": {
+        "0": "always (silent capture)"
+      },
+      "sha256": "a1bf407e9f3df02f"
+    },
+    {
+      "name": "vault-context",
+      "file": "hooks/vault-context.sh",
+      "type": "SessionStart",
+      "trigger": "session.start when project vault/ exists",
+      "purpose": "Peter injecte un résumé court du vault projet au démarrage : brief, mailbox et roadmap, sans relire tout le corpus",
+      "inputs": [
+        "current working directory",
+        "vault/00-brief.md",
+        "vault/10-mailbox.md",
+        "vault/40-roadmap.md"
+      ],
+      "outputs": [
+        "additionalContext: [VAULT-PETER] + extraits limités du vault projet"
+      ],
+      "rule": "MIRROR / Vault projet dynamique — Peter maintient la mémoire locale du projet",
+      "test": "test/hooks.js → vault-context.sh",
+      "exitCodes": {
+        "0": "always (injection only, silent if no vault/)"
+      },
+      "sha256": "3f438824f95bbc60"
+    },
+    {
+      "name": "routing-check",
+      "file": "hooks/routing-check.sh",
+      "type": "UserPromptSubmit",
+      "trigger": "every user prompt",
+      "purpose": "Injecte [HORODATAGE] + [OLLAMA] + [ROUTING] dans le contexte. Détecte le modèle via live > transcript multi-schémas > cache scoppé session > cache legacy. Détecte la stack du projet. Diagnostic périodique (30 min throttle).",
+      "inputs": [
+        "prompt",
+        "model (if available in hook JSON)",
+        "transcript_path",
+        "current-model cache from /tmp/claude-atelier-model-cache",
+        "legacy current-model from /tmp/claude-atelier-current-model"
+      ],
+      "outputs": [
+        "additionalContext: [HORODATAGE] + [OLLAMA] + [ROUTING] + source modèle + warnings éventuels"
+      ],
+      "rule": "§1 + §15 + §10",
+      "test": "test/hooks.js → routing-check.sh (live, transcript multi-schémas, cache scoppé, entête Ollama)",
+      "exitCodes": {
+        "0": "always (injection only, never blocks)"
+      },
+      "sha256": "56e63378013a6a7f"
+    },
+    {
+      "name": "guard-no-sign",
+      "file": "hooks/guard-no-sign.sh",
+      "type": "PreToolUse",
+      "trigger": "Bash tool with `git commit` command",
+      "purpose": "Bloque tout commit contenant Co-Authored-By, Signed-off-by, --signoff ou -s",
+      "inputs": [
+        "HOOK_COMMAND"
+      ],
+      "outputs": [
+        "allow (exit 0) | block (exit 2 + message)"
+      ],
+      "rule": "§13 Git Workflow — jamais signer",
+      "test": "test/hooks.js → guard-no-sign.sh (5 tests)",
+      "exitCodes": {
+        "0": "allow",
+        "2": "block — signature détectée"
+      },
+      "sha256": "0a85502467661011"
+    },
+    {
+      "name": "guard-commit-french",
+      "file": "hooks/guard-commit-french.sh",
+      "type": "PreToolUse",
+      "trigger": "Bash tool with `git commit -m` command",
+      "purpose": "Bloque les messages de commit purement anglais (≥ 2 mots EN détectés, 0 mot FR)",
+      "inputs": [
+        "HOOK_COMMAND"
+      ],
+      "outputs": [
+        "allow (exit 0) | block (exit 2 + message)"
+      ],
+      "rule": "§13 Git Workflow — commits en français",
+      "test": "test/hooks.js → guard-commit-french.sh (5 tests)",
+      "exitCodes": {
+        "0": "allow",
+        "2": "block — message anglais détecté"
+      },
+      "sha256": "87f79eae1413baa3"
+    },
+    {
+      "name": "guard-qmd-first",
+      "file": "hooks/guard-qmd-first.sh",
+      "type": "PreToolUse",
+      "trigger": "Read tool on `.md` file",
+      "purpose": "Redirige les lectures de .md projet vers QMD MCP. Ignore les fichiers de guidage système (CLAUDE.md, README.md, /.claude/, /hooks/, etc.)",
+      "inputs": [
+        "HOOK_FILE_PATH"
+      ],
+      "outputs": [
+        "allow (exit 0) + injection rappel QMD si applicable"
+      ],
+      "rule": "§15 QMD-first",
+      "test": "test/hooks.js → guard-qmd-first.sh (silencieux sur fichiers système)",
+      "exitCodes": {
+        "0": "always (warning only, never blocks)"
+      },
+      "sha256": "49a86d50ed1ad8e3"
+    },
+    {
+      "name": "guard-anti-loop",
+      "file": "hooks/guard-anti-loop.sh",
+      "type": "PostToolUse",
+      "trigger": "any Bash tool execution",
+      "purpose": "Détecte > 3 tentatives identiques échouées de la même commande (boucle infernale)",
+      "inputs": [
+        "HOOK_COMMAND",
+        "HOOK_EXIT_CODE"
+      ],
+      "outputs": [
+        "allow (exit 0) + warning si seuil atteint"
+      ],
+      "rule": "§6 Gestion des erreurs — ne jamais itérer à l'identique",
+      "test": null,
+      "exitCodes": {
+        "0": "always (warning only)"
+      },
+      "sha256": "61830ca0a3479e1b"
+    },
+    {
+      "name": "guard-tests-before-push",
+      "file": "hooks/guard-tests-before-push.sh",
+      "type": "PreToolUse + PostToolUse",
+      "trigger": "Bash tool with test runner OR `git push`",
+      "purpose": "Marque qu'une suite de tests a tourné. Bloque `git push` si aucun test n'a tourné depuis le dernier push.",
+      "inputs": [
+        "HOOK_COMMAND"
+      ],
+      "outputs": [
+        "allow (exit 0) | block (exit 2) si push sans tests préalables"
+      ],
+      "rule": "§11 Tests + §24 Pre-push gate",
+      "test": "test/hooks.js → guard-tests-before-push.sh (3 tests)",
+      "exitCodes": {
+        "0": "allow",
+        "2": "block — push sans tests"
+      },
+      "sha256": "8bf890900e7c8fe9"
+    },
+    {
+      "name": "telegram-notify",
+      "file": "hooks/telegram-notify.sh",
+      "type": "PostToolUse",
+      "trigger": "Bash tool with `git commit` or `git push` command (exit 0 only)",
+      "purpose": "Phase C — envoie une alerte Telegram via FIFO nommé /tmp/claude-telegram-out si le bridge est actif : ✅ Commit ou 🚀 Push. No-op silencieux si FIFO absent.",
+      "inputs": [
+        "HOOK_COMMAND",
+        "HOOK_EXIT_CODE"
+      ],
+      "outputs": [
+        "writes one line to /tmp/claude-telegram-out (named pipe) if bridge active"
+      ],
+      "rule": ".claude/autonomy/telegram.md — Mode nuit alertes FIFO",
+      "test": "test/telegram.test.js → Phase C hooks",
+      "exitCodes": {
+        "0": "always (best-effort — skipped si FIFO absent ou aucun lecteur, écriture O_NONBLOCK non-bloquante)"
+      },
+      "sha256": "14ad6d8572425df2"
+    },
+    {
+      "name": "guard-review-auto",
+      "file": "hooks/guard-review-auto.sh",
+      "type": "PostToolUse",
+      "trigger": "Bash tool with `git commit` command",
+      "purpose": "Système Challenger — 5 triggers (volume lignes, feature, endurance, architecture, bug bloquant) qui proposent /review-copilot ou un handoff",
+      "inputs": [
+        "HOOK_COMMAND",
+        "git diff stats"
+      ],
+      "outputs": [
+        "allow (exit 0) + injection suggestion review si trigger atteint"
+      ],
+      "rule": "§25 Inter-agents — Review Copilot auto",
+      "test": null,
+      "exitCodes": {
+        "0": "always (suggestion only, never blocks)"
+      },
+      "sha256": "ab21957088aa7336"
+    },
+    {
+      "name": "model-metrics",
+      "file": "hooks/model-metrics.sh",
+      "type": "UserPromptSubmit",
+      "trigger": "every user prompt",
+      "purpose": "Analyse les 5 derniers tours assistant (outil dominant par tour, 3 niveaux low/medium/high). Émet [METRICS] avec pastille 🟢/🟠/🔴 pour §1. Silencieux si transcript absent ou < 2 tours.",
+      "inputs": [
+        "transcript_path",
+        "model (if available in hook JSON)",
+        "current-model from /tmp"
+      ],
+      "outputs": [
+        "additionalContext: [METRICS] fit:VERDICT(Xh/Xm/Xl/Xt) | model:MODEL | verdict → suggestion PASTILLE"
+      ],
+      "rule": "§1 Horodatage + pastille · §15 Auto-métriques",
+      "test": "test/hooks.js → model-metrics.sh (5 tests)",
+      "exitCodes": {
+        "0": "always (warning only, never blocks)"
+      },
+      "sha256": "f58d9b4a49f2c40f"
+    },
+    {
+      "name": "guard-hooks-reload",
+      "file": "hooks/guard-hooks-reload.sh",
+      "type": "PostToolUse",
+      "trigger": "Edit/Write tool on hooks/, settings.json, .mcp",
+      "purpose": "Rappelle qu'un redémarrage VS Code est requis pour recharger les hooks/settings/MCP modifiés",
+      "inputs": [
+        "HOOK_FILE_PATH"
+      ],
+      "outputs": [
+        "allow (exit 0) + injection rappel reload si applicable"
+      ],
+      "rule": "Exploitation — éviter état désynchronisé",
+      "test": null,
+      "exitCodes": {
+        "0": "always (warning only)"
+      },
+      "sha256": "fdc812990fe124ed"
+    },
+    {
+      "name": "start-maestro",
+      "file": "hooks/start-maestro.sh",
+      "type": "SessionStart",
+      "trigger": "session.start",
+      "purpose": "Maestro §0 watcher — met à jour pouls.md de tous les agents, détecte les changements de phase, émet [PULSE] indicator dans le contexte",
+      "inputs": [
+        "session.start event"
+      ],
+      "outputs": [
+        "additionalContext: [PULSE] 💓niveau·n/total si agents actifs",
+        "updates pouls.md for all agents via scripts/pulse-maestro.js"
+      ],
+      "rule": "§0 Phase watcher + présence multi-agents",
+      "test": null,
+      "exitCodes": {
+        "0": "always (silent update)"
+      },
+      "sha256": "a566c6a3b9cdbed5"
+    },
+    {
+      "name": "stop-pulse",
+      "file": "hooks/stop-pulse.sh",
+      "type": "Stop",
+      "trigger": "session.stop",
+      "purpose": "Met à jour pouls.md de l'agent Claude Code courant à la fin de session (lastPulse + statut recalculé)",
+      "inputs": [
+        "session.stop event"
+      ],
+      "outputs": [
+        "updates pouls.md via scripts/pulse-update.js"
+      ],
+      "rule": "§0 Logbook de clôture + présence multi-agents",
+      "test": null,
+      "exitCodes": {
+        "0": "always (silent update)"
+      },
+      "sha256": "ddd1ef03ad479205"
+    },
+    {
+      "name": "detect-design-need",
+      "file": "hooks/detect-design-need.sh",
+      "type": "UserPromptSubmit",
+      "trigger": "every user prompt",
+      "purpose": "Détecte un besoin design/UI/UX dans le prompt et propose Séréna (chef designer senior). Throttle : 1 proposition par session.",
+      "inputs": [
+        "prompt",
+        "session_id",
+        "transcript_path"
+      ],
+      "outputs": [
+        "allow (exit 0) + injection suggestion Séréna si keywords détectés"
+      ],
+      "rule": "Skill design-senior — auto-proposition",
+      "test": "test/hooks.js → detect-design-need.sh",
+      "exitCodes": {
+        "0": "always (suggestion only, never blocks)"
+      },
+      "sha256": "77e942754b683f14"
+    },
+    {
+      "name": "peter-inbox-check",
+      "file": "hooks/peter-inbox-check.sh",
+      "type": "UserPromptSubmit",
+      "trigger": "every user prompt",
+      "purpose": "Phase D — détecte /tmp/peter-notify et injecte le dernier message Telegram de Peter dans le contexte Claude Code en temps réel.",
+      "inputs": [
+        "signal file /tmp/peter-notify"
+      ],
+      "outputs": [
+        "allow (exit 0) + injection message Peter si signal présent"
+      ],
+      "rule": "Phase D — Peter → Claude Code real-time notification",
+      "test": "test/hooks.js → peter-inbox-check.sh",
+      "exitCodes": {
+        "0": "always (notification only, never blocks)"
+      },
+      "sha256": "a37841fc11af05b7"
+    }
+  ],
+  "stats": {
+    "total": 17,
+    "byType": {
+      "helper": 1,
+      "SessionStart": 3,
+      "Stop": 1,
+      "UserPromptSubmit": 3,
+      "PreToolUse": 3,
+      "PostToolUse": 4,
+      "PreToolUse + PostToolUse": 1
+    },
+    "blocking": 3,
+    "warningOnly": 12,
+    "withTests": 5
+  },
+  "conventions": {
+    "sourcing": "Tous les hooks (sauf session-model et routing-check qui parsent eux-mêmes le stdin) sourcent _parse-input.sh pour l'extraction des variables.",
+    "exit2": "Exit code 2 = block + le stderr est affiché à Claude. Tout autre exit code = allow.",
+    "tmpFiles": "État inter-hooks via /tmp/claude-atelier-* (jamais dans le repo).",
+    "testing": "Hooks bloquants doivent avoir un test dans test/hooks.js. Hooks warning-only sont optionnels."
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "subject": "Doc d'alignement marketplace inter-agents v0 — review du raisonnement avant POC",
+    "date": "2026-04-29",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "f0ef26663a989929ab77e6457f1cea6517351624..c2efdd7f9c085b4fcaa68a58a3298aae22a90d5b"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Doc d'alignement v0 pour une nouvelle feature majeure : marketplace inter-agents. La doc est le résultat d'une session structurée Q1-Q5 entre Malik et Claude (Opus 4.7) le 2026-04-29. Décisions verrouillées : (Q1) identité agent = projet@user ; (Q2) régime B + autonomie poussée, pas de popup, dashboard /Work-Atelier ; (Q3) POC sur scénario D (review handoff §25 Claude↔Copilot), archi générique pour 4 autres scénarios ; (Q4) bootstrap = preview ouverte aux 6293 utilisateurs npm existants, gros lancement coordonné Reddit/LinkedIn/Medium, image Airbnb pour LLM + angle écologique fort (recyclage capacité, soulagement infra mondiale) ; (Q5 axe 1) ledger répliqué via ToM-protocol (gossip signé) ; (Q5 axe 2) ramp ETH = pistes ouvertes (mainnet/L2/launchpad CEX/Pumpfun), décision au TGE ; (Q5 axe 3 + tokenomics globale) reportés au moment opportun. Axiome constitutionnel : « moins de friction, plus de magie ». Vision sociétale ancrée comme continuité de ToM-protocol (recyclage capacité dormante au niveau compute, comme ToM le fait au niveau transport). Range commits : 4f4fa46 (handoff pulse hardening), 85af87f + 58fb931 (fixes review Copilot pulse), ffadc2c (merge PR #30), eb14604 (bump 0.23.0), c2efdd7 (la doc marketplace, +394 lignes). Prérequis exécutés : v0.23.0 Pulse & Maestro live sur npm, ToM-protocol Phase 2 validée. Prochaine étape après cette review : POC technique scenario D.",
+    "question": "Cette doc d'alignement contient-elle un angle mort, une contradiction interne, ou un risque structurel non identifié, qui rendrait la feature non-viable ou bancale dès le POC ? Je cherche en particulier : (A) une faille de raisonnement sur l'arbitrage de surplus économique (le marché secondaire de capacité LLM est-il vraiment économiquement viable, ou est-ce une illusion : si tous les LLM payés sont parallèles à Anthropic, alors la marketplace ne fait que router des charges qui auraient été supportées de toute façon ?) ; (B) une fragilité de l'ancrage ToM-protocol (le couplage marketplace ↔ ToM est-il assez découplé pour qu'une rupture côté ToM ne casse pas la marketplace, et inversement ?) ; (C) une incohérence entre l'axiome 'moins de friction' et le pitch 'rentabilité 2 mois d'abo' (les early adopters qui veulent gagner doivent-ils renoncer à la magie zéro-friction, ou les deux sont compatibles ?) ; (D) un risque légal sous-estimé sur le scénario D au POC (review entre Claude et Copilot, où Copilot répond pour le compte d'un user qui paie GitHub Copilot — est-ce déjà de la 'revente déguisée' qui violerait le TOS Microsoft/GitHub avant même le ramp ETH ?). Pas une refonte générale demandée, juste la trouvaille du point dur si elle existe.",
+    "filesToRead": [
+      "docs/proposals/marketplace-inter-agents.md",
+      "docs/roadmap.md",
+      ".claude/CLAUDE.md",
+      "docs/handoffs/2026-04-28-pulse-maestro-hardening.json",
+      "scripts/handoff-debt.sh",
+      "package.json"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude",
+      "INTERDIT de modifier la doc d'alignement marketplace elle-même — c'est une décision actée entre Claude et Malik, pas un brouillon à corriger",
+      "Tu peux remettre en cause les choix Q1-Q5 en argumentant, mais pas les modifier dans le doc",
+      "Si tu identifies un angle mort, formule-le précisément avec le mécanisme de défaillance et un point de vérification empirique"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "Review non fournie sur le fond. Sur PR #32 (handoff/2026-04-29-marketplace-alignment), Copilot n'a posté qu'un seul commentaire inline, exclusivement procédural : il a signalé que `response.content` et `integration` étaient null et que `npm run validate:handoffs` rejetterait le handoff. Aucun avis sur les angles morts demandés (A : viabilité économique du marché secondaire, B : couplage marketplace/ToM-protocol, C : tension axiome friction-zéro vs pitch rentabilité, D : risque légal Microsoft/GitHub TOS sur le scénario D). Sur PR #33 (qui contient `docs/proposals/marketplace-inter-agents.md`), Copilot a posté 6 commentaires inline tous portant sur la forme : 4 sont des hallucinations (allègue des `||` doubles dans des tableaux qui utilisent déjà la syntaxe Markdown standard `|...|`, vérifié `grep '^||'` = 0 match), 2 sont valides (typo `relay`→`relais` ligne 279, statut contradictoire `draft v0` vs `closed` ligne 385 levé via précision « décisions Q1–Q5 figées »). Conclusion : pour la review de fond demandée dans ce handoff, Copilot n'a rien produit. Les angles morts A/B/C/D restent ouverts et nécessitent soit un autre reviewer (GPT/Mistral via /la-bise), soit une re-soumission ciblée à Copilot avec un prompt plus explicite. Ne pas merger PR #32 en pensant que la review a eu lieu."
+  },
+  "integration": {
+    "status": "no-review-content",
+    "validatedTarget": "review absente — pas de fixes à appliquer",
+    "summary": "Aucune fix n'est appliquée car Copilot n'a pas fourni de review sur les angles morts A/B/C/D. Les 2 fixes valides identifiés sur PR #33 (relay→relais, statut figé) ont été commités en 4f9005f sur feature/marketplace mais concernent la forme de la doc, pas le raisonnement. La doc d'alignement reste intacte (Q1-Q5 figées, axiome constitutionnel inchangé). Action recommandée : demander une 2e review à GPT-5.4 ou Mistral via /la-bise sur les questions A/B/C/D, ou itérer un nouveau handoff plus ciblé pour Copilot.",
+    "appliedFixes": [
+      "Aucun — pas de review de fond reçue"
+    ],
+    "rejectedSuggestions": [
+      "4 commentaires Copilot sur PR #33 alléguant `||` dans les tableaux Markdown lignes 58/83/163/374 — hallucinations, vérifié par grep, le doc utilise déjà `|...|`",
+      "Suggestion implicite de mettre la doc en `closed` partout — refusée, le statut `draft v0` reste valide pour la phase d'alignement"
+    ],
+    "notes": [
+      "PR #33 fixes valides commités en 4f9005f (relay→relais + statut)",
+      "Cette intégration documente l'absence de review de fond, pas une review réussie",
+      "Prochaine étape : second avis externe sur A/B/C/D avant POC marketplace"
+    ]
+  }
+}

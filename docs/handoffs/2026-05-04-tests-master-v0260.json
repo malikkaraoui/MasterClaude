@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "subject": "Tests master daemon + fixes Copilot intégrés — v0.26.0",
+    "date": "2026-05-04",
+    "type": "review",
+    "priority": "moyenne",
+    "reviewedRange": "e15c3622f6dbfa1e9d5bb8baa0531527248b8138..98b86d7efa121dbad5669c5d9cce8f56b1d2180e"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Depuis le dernier handoff intégré (e15c3622), 4 commits livrés : (1) db452f8 fix: appliquer review Copilot #55 — PID recyclé via ps identity check, boot crash detection 250ms, try/catch TCC vault-loader, OR true mailbox-watcher, strip préfixe double 'Claude :' dans claude-notify.sh. (2) 1f05755 chore: bump v0.26.0 — ajout de 34 tests pour les modules master daemon (ContextMonitor : push/getContext/rotation 12 tours/reset, SessionManager : active null/getCwd fallback/activate/handleCommand, vault-loader : inexistant retourne ''). (3) chore commits mailbox + handoff merge PR #55. Total : 14 fichiers, +335/-22 lignes.",
+    "question": "Les 34 nouveaux tests dans test/hooks.js pour ContextMonitor, SessionManager et vault-loader couvrent-ils les cas limites critiques du master daemon ? En particulier : la rotation glissante à 12 tours (off-by-one possible), le fallback os.homedir() dans SessionManager quand HOME est absent, et la résilience try/catch de vault-loader face aux erreurs TCC/permissions — y a-t-il des scénarios de défaillance non couverts ?",
+    "filesToRead": [
+      "test/hooks.js",
+      "src/master/context-monitor.js",
+      "src/master/session-manager.js",
+      "src/master/vault-loader.js",
+      "src/master/index.js",
+      "scripts/mailbox-watcher.sh",
+      "scripts/claude-notify.sh"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "5 observations sur les tests master daemon. (1) Rotation ContextMonitor : le test poussait 12 tours alors que MAX_TURNS=10 — le seuil off-by-one n'était pas vérifié précisément (présent à tour 10, expulsé au tour 11). (2) vault-loader : seul le chemin inexistant était couvert ; la résilience try/catch visée (TCC/EACCES) nécessite un fichier existant avec permissions 000 pour déclencher l'exception réelle. (3) SessionManager HOME absent : le fallback os.homedir() n'était pas testé — il faut un sous-process avec HOME='' pour isoler la résolution du module. (4) Tests au top-level hors test() : les blocs { } avec await import() ne sont pas catchés par le compteur pass/fail ; une exception court-circuite le reporting. (5) Le handoff JSON lui-même doit avoir response.content ≥ 100 chars et integration remplis avant merge pour passer validate-handoff.js.",
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": {
+    "retained_implement": "Les 5 points ont été appliqués : (1) rotation testée aux bornes exactes 10/11 tours, (2) test EACCES avec chmod 000 + cleanup, (3) sous-process HOME='' pour le fallback os.homedir(), (4) tous les blocs réécris avec test() pour reporting cohérent — 69/69 passés, (5) handoff rempli (response + integration).",
+    "verdict": "Review Copilot intégrée en totalité. Tests master daemon renforcés : seuil MAX_TURNS vérifié sans off-by-one, résilience EACCES couverte, fallback HOME testé en isolation. 69/69 tests passent. Handoff valide."
+  }
+}

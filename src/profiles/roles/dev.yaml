@@ -1,0 +1,5 @@
+role: dev
+ttl: 300
+ceiling: 0.8
+base: 0.3
+description: "Développeur — bursts intenses, repos entre sprints"

@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "subject": "vault report + vault stale + hook SessionStart PETER_REPORT.md",
+    "date": "2026-05-02",
+    "type": "review",
+    "priority": "moyenne",
+    "reviewedRange": "57e37a01f1f592118c3cf72ea7ec1ba988aee94a..4dd3d77f5f4c40a0c24f4eca2623e1dae6a254a7"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Phase A du plan peter-vault-graphify-plus : Peter devient une vraie carte générée. Commits feat/fix du range : (1) feat(vault): ajoute vault report + vault stale — nouvelles commandes CLI `vault report` (génère vault/PETER_REPORT.md structuré depuis les fichiers du vault : brief, mailbox, decisions, roadmap) et `vault stale` (audite la fraîcheur des fichiers avec seuils configurables : brief 7j, roadmap 14j, report 24h, mailbox_warn 3 entrées). (2) feat(vault): hook SessionStart préfère PETER_REPORT.md si présent et récent — vault-context.sh modifié : si PETER_REPORT.md < 24h il est injecté en priorité, sinon fallback sur les 3 fichiers source avec alerte stale. (3) fix: intègre la review Copilot du vault Peter — fix pré-existant. Bonus : bug fix dans src/pulse/marketplace.js — isOpportunityRelevant utilisait new Date() au lieu du param now injectable par les tests (deadline passée à heure réelle vs heure mockée). 10 tests vault ajoutés (13/13). 639 lignes +, 50 -.",
+    "question": "La fonction generateReport dans bin/vault.js extrait les données des fichiers vault par parsing Markdown naïf (regex/startsWith). Est-ce que les patterns d'extraction couvrent bien les formats réels des fichiers générés par vault init ? En particulier : (1) extractBulletItems s'arrête au premier heading de même niveau rencontré — est-ce robuste si un fichier a des sections imbriquées ? (2) extractDecisions retourne les 5 premières entrées — ce devrait être les 5 les plus récentes (bas du fichier) mais en pratique slice(0,5) prend les premières. Y a-t-il un risque de confusion ? (3) Le seuil REPORT_MAX_AGE_HOURS=24 dans le hook est-il aligné avec STALE_DAYS.report=1 dans vault.js — ou un utilisateur qui relance vault report quelques secondes après ne verra-t-il pas le hook afficher une alerte stale incorrectement ?",
+    "filesToRead": [
+      "bin/vault.js",
+      "hooks/vault-context.sh",
+      "test/vault.js",
+      "src/pulse/marketplace.js",
+      "docs/proposals/peter-vault-graphify-plus-plan.md"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "Review PR #36 — 4 commentaires inline sur docs/handoffs/2026-05-02-vault-report-stale-hook.json, hooks/vault-context.sh, src/features.json, test/vault.js. (1) [hooks/vault-context.sh:76] Seuil non aligné : hook utilise -lt 24 (strict), vault.js utilise d > 1 (strict). À 24h pile, vault.js dit OK mais hook dit STALE — contradiction. Fix : utiliser -le pour aligner sur la sémantique 'stale si strictement supérieur à 1 jour'. (2) [src/features.json:47] Commandes report et stale absentes des flags vault dans features.json — l'aide CLI générée depuis ce fichier sera incomplète. Fix : ajouter 'report' et 'stale' dans le tableau flags. (3) [test/vault.js:150] Test vault report extrait décisions avec un seul bloc — ne détecte pas de bug d'ordre si slice(0,5) prenait les mauvaises décisions. Fix : test avec >5 décisions + assertion sur quelles décisions figurent et lesquelles sont exclues. (4) [docs/handoffs/...:32] Rappel que response.content et integration null rendront le handoff invalide pour validate-handoff.js — champ informatif uniquement, non bloquant pour la review."
+  },
+  "integration": {
+    "retained_implement": "Les 3 fixes identifiés par Copilot ont été appliqués sur feature/vault-dynamique-peter (commit b1f09fa) : (1) vault-context.sh : -lt → -le pour aligner le seuil 24h exact avec STALE_DAYS.report=1 de vault.js ; (2) src/features.json : ajout de 'report' et 'stale' dans les flags vault ; (3) test/vault.js : nouveau test 'vault report limite à 5 décisions' avec 7 entrées, assertions sur les 5 premières incluses et les 2 dernières exclues. Le point 4 (handoff null) est attendu et non applicable.",
+    "verdict": "Review Copilot de qualité — 3 vrais problèmes détectés et corrigés, 1 faux positif documenté. Le fix le plus important est l'alignement du seuil 24h entre le hook bash et vault.js qui aurait pu provoquer une alerte stale incorrecte dans un cas limite. 14/14 tests vault passent après les corrections. Gate verte sur feature/vault-dynamique-peter."
+  }
+}

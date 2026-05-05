@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "subject": "Lots 0+4+10 — modularisation src/vault/, extracteurs AST multi-langues, MCP Peter squelette",
+    "date": "2026-05-04",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "facca3bd586ccbc56d8ef51308edeae2bc6a9234..fbcd6d171f90204e36b91241b0aeddb4990442d3"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "3 lots mergés sur main en séquence : Lot 0 (modularisation bin/vault.js → src/vault/core/|docs/|graph/|watch/), Lot 4 (extracteurs AST js/json/shell/go + --with-symbols dans vault graph), Lot 10 (squelette MCP Peter JSON-RPC stdio avec tools query_vault/get_node/neighbors/stale_status). Les merges ont nécessité une résolution de conflit complexe : lot-0 avait réécrit bin/vault.js en imports modulaires, lot-4 avait ajouté countCodeSymbols sur l'ancienne structure. Résolution : garder la structure lot-0 + transplanter countCodeSymbols + threading symbolCount via buildGraph(cwd, opts) → graphVault(cwd, symbolCount). 74/74 tests passent. Commits clés : 811fa21 (Lot 0), 6e3a4aa (Lot 4), fbcd6d1 (Lot 10), cbe0df2 (telegram bridge Phase B), b183c8c (fix Copilot #47).",
+    "question": "Le threading de symbolCount depuis bin/vault.js → graphVault(cwd, symbolCount) → buildGraph(cwd, {symbolCount}) → stats.symbolCount est-il robuste ? Y a-t-il des cas où symbolCount pourrait ne pas être propagé correctement (appel direct de graphVault depuis un autre module, valeur undefined vs 0, etc.) ?",
+    "filesToRead": [
+      "bin/vault.js",
+      "src/vault/graph/build.js",
+      "src/vault/extractors/js.js",
+      "src/vault/extractors/go.js",
+      "src/vault/extractors/shell.js",
+      "src/vault/mcp/server.js",
+      "src/vault/core/utils.js",
+      "test/vault.js"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "15 commentaires inline sur PR #50. Bugs critiques identifiés : (1) build.js — edges utilisent `relation:` au lieu de `type:` (3 occurrences : vault_file, decision, roadmap), cassant explain/MCP/exports GraphML/Neo4j. (2) classify.js:149 — `renameSync` appelé sans être importé depuis node:fs → ReferenceError au premier `vault docs organize --apply`. (3) build.js:139 — computeCommunities appelé avant l'ajout des nœuds doc_category/risk/question → ces nœuds n'ont jamais de champ `community`. (4) build.js:158 — edges classified_as créés vers des IDs de nœuds absents → graphe incohérent. (5) export.js:117 — après D3 forceLink, `l.source`/`l.target` sont des objets, pas des strings ; comparaison `=== d.id` ne matche jamais → surlignage voisins cassé. (6) daemon.js:83 — `watchOnce(vaultPath)` sans callbacks → vault watch once ne reconstruit ni manifest ni graph.json. Signalements hors scope Lots 0+4+10 : mcp/server.js framing stdio (Phase G), telegram-bridge.py gestion erreurs (Phase A séparé), test coverage vault maintain."
+  },
+  "integration": {
+    "retained_implement": [
+      "build.js : relation → type dans 3 edges (vault_file, decision, roadmap)",
+      "classify.js : ajouter renameSync dans import node:fs",
+      "build.js : déplacer computeCommunities après tous les nœuds (doc_category/risk/question)",
+      "build.js : créer nœud markdown_document minimal si absent avant edge classified_as",
+      "export.js : fix D3 source/target — utiliser typeof pour déréférencer .id",
+      "daemon.js : passer updateVault et graphVault comme callbacks à watchOnce"
+    ],
+    "deferred": [
+      "mcp/server.js framing stdio Content-Length (Phase G)",
+      "mcp/server.js rechargement graph (enhancement)",
+      "telegram-bridge.py gestion erreurs vocaux (Phase A séparé)",
+      "test/vault.js : ajouter test vault maintain sans symbolCount"
+    ],
+    "verdict": "6 bugs réels corrigés sur les fichiers Lots 0+4+10 ; 74/74 tests passent après fix. Les issues telegram-bridge et MCP-framing sont hors périmètre de ce handoff et seront traités dans leurs lots respectifs. Le threading symbolCount original est robuste — graphVault(cwd, symbolCount=0) avec default correct, buildGraph utilise opts.symbolCount ?? 0."
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "header": "Agents actifs",
+  "expired": "EXPIRÉ",
+  "levels": {
+    "off": "éteint",
+    "idle": "repos",
+    "low": "faible",
+    "medium": "modéré",
+    "high": "élevé",
+    "critical": "critique"
+  },
+  "roles": {
+    "secretary": "secrétaire",
+    "dev": "dev",
+    "marketing": "marketing",
+    "cyber": "cyber",
+    "ops": "ops"
+  }
+}

@@ -1,0 +1,66 @@
+name: "🐛 Bug Report"
+description: "Quelque chose ne marche pas comme prévu"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de reporter ce bug. Plus le rapport est précis, plus vite on corrige.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version claude-atelier
+      description: "Résultat de `npx claude-atelier --version`"
+      placeholder: "0.3.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Composant concerné
+      options:
+        - Hook (guard-*, routing-check)
+        - Skill (slash command)
+        - CLI (init, doctor, lint)
+        - Satellite (stack)
+        - Agent nommé (Steve, Isaac)
+        - Permissions
+        - Mode nuit
+        - Autre
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description du bug
+      description: "Qu'est-ce qui se passe ? Qu'est-ce qui devrait se passer ?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes pour reproduire
+      description: "1. ... 2. ... 3. ..."
+      placeholder: |
+        1. Installer claude-atelier
+        2. Lancer `npx claude-atelier init`
+        3. Observer que...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / sortie terminal
+      description: "Coller la sortie pertinente"
+      render: shell
+
+  - type: input
+    id: os
+    attributes:
+      label: OS + IDE
+      placeholder: "macOS 15.4, VS Code 1.96, Claude Code extension"

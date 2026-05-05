@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "subject": "handoff JSON + gate §25 feature-branch-aware + validate-handoff JSON",
+    "date": "2026-04-21",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "c1ec98f5a3bb41bf195a3232e4ec32705a8355f8..54fbd31c7693615a0a34f2315d9c773cda998b9d"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Migration du format handoff de .md vers .json pour que Copilot PR review puisse lire les fichiers. Ajout du support JSON dans validate-handoff.js et handoff-debt.sh. Refonte de la gate §25 pour skipper sur les branches feature et bloquer uniquement les pushes vers main — workflow GitHub mailbox activé.",
+    "question": "Les 5 fichiers JS/SH modifiés (validate-handoff.js, handoff-debt.sh, pre-push-gate.sh, install-git-hooks.sh, doctor.js) sont-ils robustes ? Angles morts dans la logique de validation JSON, le tri des handoffs, et la détection de branche ?",
+    "filesToRead": [
+      "test/validate-handoff.js",
+      "test/doctor.js",
+      "scripts/handoff-debt.sh",
+      "scripts/pre-push-gate.sh",
+      "scripts/install-git-hooks.sh",
+      "docs/handoffs/_template.json"
+    ],
+    "constraints": [
+      "Ne pas modifier le code source directement",
+      "Signaler les bugs sans les corriger",
+      "Rester sur les fichiers listés"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "PR overview: updates handoff workflow to JSON-first so Copilot PR review can reliably read it, and adjusts §25 enforcement to be branch-aware.\n\n6 commentaires inline :\n\n1. handoff-debt.sh:47 — xargs peut splitter ls -t en plusieurs invocations si la liste grandit, cassant l'ordre global. Suggestion: utiliser find -printf + sort, ou passer tous les chemins à un seul ls -t via un tableau.\n\n2. validate-handoff.js:76 — validateRange() conditionne merge-base à errors.length === 0, mais errors contient aussi des erreurs non liées (Date/Type). Un reviewedRange non-ancestor peut ne pas être reporté. Utiliser des variables okFrom/okTo locales à la place.\n\n3. validate-handoff.js:218 — filter sur filesToRead suppose string. Si un JSON contient un objet/number, startsWith va throw. Ajouter typeof f === 'string' avant d'appeler startsWith.\n\n4. validate-handoff.js:226 — response.model.toLowerCase() peut throw si model est truthy mais non-string. Vérifier typeof avant toLowerCase.\n\n5. test/doctor.js:253 — PUSH_TO_MAIN non défini (CI, npm test local) => warn même sur main. Défaut devrait être true ou détecter la branche via GITHUB_REF_NAME/git rev-parse.\n\n6. pre-push-gate.sh:300 — message d'aide mentionne 'response/integration' mais le schéma validé est response.content + integration. Corriger le wording."
+  },
+  "integration": {
+    "date": "2026-04-21",
+    "model": "claude-sonnet-4-6",
+    "retained_implement": [
+      { "point": "handoff-debt.sh:47 — tri xargs fragile", "action": "Collecter les paths dans un tableau bash, passer en un seul appel ls -t" },
+      { "point": "validate-handoff.js:76 — merge-base conditionnel sur errors globaux", "action": "Remplacer par okFrom/okTo locaux avant le check merge-base" },
+      { "point": "validate-handoff.js:218 — typeof guard sur filesToRead", "action": "Ajouter typeof f === 'string' + trim() dans le filter" },
+      { "point": "validate-handoff.js:226 — typeof guard sur response.model", "action": "Check typeof avant toLowerCase, ajouter erreur de type si non-string" },
+      { "point": "test/doctor.js:253 — PUSH_TO_MAIN absent = warn sur main", "action": "Détecter la branche courante via git rev-parse quand PUSH_TO_MAIN absent" },
+      { "point": "pre-push-gate.sh:300 — wording incorrect", "action": "Remplacer 'response/integration du .json' par 'response.content puis integration'" }
+    ],
+    "retained_later": [],
+    "discarded": [],
+    "verdict": "Review de qualité — 6 bugs réels identifiés dont 2 critiques (typeof crash, merge-base conditionnel incorrect). Tous retenus et appliqués dans ce commit."
+  }
+}

@@ -1,0 +1,5 @@
+role: ops
+ttl: 180
+ceiling: 0.7
+base: 0.4
+description: "Ops — continu, intensité modérée à élevée"

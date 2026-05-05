@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "subject": "sprint 2026-04-21 — La Bise, copilot-loop, handoff JSON, gate §25, atelier-config",
+    "date": "2026-04-21",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "c1ec98f5a3bb41bf195a3232e4ec32705a8355f8..bfecc43ca86ad44c8c66dc18b30663e6b496cb13"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Sprint complet depuis le dernier handoff intégré. 9 commits feat/fix : (1) feat: agent La Bise — échanges inter-LLM GPT/Mistral + orchestration Copilot review auto. (2) feat: handoff format JSON — format unique lisible par Copilot PR review ET GPT/Mistral, remplace le markdown. (3) feat: gate §25 — skip feature branches + support handoff JSON (fin du deadlock circulaire). (4) feat: skill copilot-loop — loop autonome PR→Copilot review→handoff JSON→fixes→merge, zéro intervention utilisateur. (5) feat(atelier-config) — tableau de contrôle enrichi : état système (proxy, Ollama, modèle Claude), groupe Skills & Outils (5 flags), groupe Format entête §1 (7 flags header_show_* déclaratifs), tableau 20 agents slash. (6) fix: 3 rounds de corrections post-review Copilot (#20, #21, #22). (7) §25 CLAUDE.md renforcé : handoff automatique sans demander confirmation. (8) review-copilot SKILL corrigé : branche handoff/ + gh pr create.",
+    "question": "Deux questions liées : (a) Le skill review-copilot génère maintenant une branche handoff/ + PR GitHub — le flow complet copilot-loop (auto-merge après réponse Copilot) est-il robuste ou y a-t-il des cas limites non couverts ? (b) Les 7 flags header_show_* sont déclaratifs (non câblés dans les hooks §1). Quelle architecture pour les brancher sans régresser le filet model-detection / pastille / mode A-M ?",
+    "filesToRead": [
+      "src/skills/review-copilot/SKILL.md",
+      "src/skills/copilot-loop/SKILL.md",
+      "src/skills/la-bise/SKILL.md",
+      "src/features-registry.json",
+      "hooks/routing-check.sh",
+      "hooks/model-metrics.sh",
+      "scripts/pre-push-gate.sh",
+      "scripts/handoff-debt.sh"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "5 points identifiés sur la PR #23 : (1) Chemins absolus non portables dans atelier-config.md — remplacer par node bin/cli.js relatif ou npx claude-atelier. (2) --set documenté mais potentiellement absent de bin/features.js à ce stade du branch — vérifier la présence effective du flag. (3) Note 'read-only' sur header_show_* trompeuse : les flags sont modifiables via CLI mais sans effet runtime — reformuler en précisant l'absence de câblage hook. (4) filesToRead référençait hooks/user-prompt-submit.sh et hooks/post-tool-use.sh inexistants — les vrais fichiers sont hooks/routing-check.sh et hooks/model-metrics.sh selon hooks-manifest.json. (5) Le handoff JSON lui-même était en draft (response.content null, integration null) — à compléter avant merge sinon validate-handoff.js le rejette."
+  },
+  "integration": {
+    "retained_implement": "Tous les 5 points ont été corrigés : (1) chemins relatifs dans atelier-config.md, (2) --set implémenté dans bin/features.js avec support type string, (3) note header_show_* reformulée (modifiable CLI mais sans effet runtime), (4) filesToRead corrigé vers hooks/routing-check.sh et hooks/model-metrics.sh, (5) handoff complété avec response + integration.",
+    "verdict": "Review Copilot intégrée — 5/5 points traités. Le sprint est cohérent : La Bise + copilot-loop + gate §25 forment un pipeline inter-LLM fonctionnel. Le flow handoff/branche→PR→ScheduleWakeup est robuste. Les header_show_* restent déclaratifs en attente de câblage hook — non bloquant."
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "subject": "vault Phase C — graphe minimal Peter (graph.json + vault query + PETER_REPORT enrichi)",
+    "date": "2026-05-03",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "76ac95bffa07e65dc0a413ebc84e05ad476f6c30..d318c8484dc2fde7b3583422c82d3c6810b8f3f5"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Phase C livrée sur branche feat/vault-graph-minimal (PR #39). Un seul commit feat : d318c84 — 'feat: ajoute le graphe minimal Peter (Phase C)'. Impacte 4 fichiers : bin/vault.js (+477 lignes — fonctions buildGraph, graphVault, queryVaultGraph, printGraph, printQuery, scoreNode, slugify, extractConcepts, isBmadPath, readExcerpt, getFileMtime + enrichissement generateReport + staleVault + parseArgs fix), test/vault.js (+242 lignes — 15 nouveaux tests Phase C : 8 pour vault graph, 5 pour vault query, 2 pour PETER_REPORT), src/features.json (+2 flags : graph et query), docs/superpowers/plans/2026-05-03-vault-graph-minimal.md (plan). Fix notable dans parseArgs : filter(a => a !== 'vault') supprimait aussi le texte de requête quand l'utilisateur tapait 'vault query vault' — corrigé en ne supprimant que le premier positional 'vault'. 29/29 tests vault · 37/37 vault-update · gate CI verte.",
+    "question": "L'extraction des concepts (extractConcepts) et le calcul de centralité (degree + 2*decision_edges + 2*roadmap_edges) sont-ils assez robustes pour un vault projet réel avec des décisions et roadmap items en français ? Y a-t-il des cas où slugify ou le filtrage GENERIC_CONCEPTS_EXTRACT produirait des concepts vides, des collisions d'ids, ou des nœuds fantômes qui faussent la centralité ?",
+    "filesToRead": [
+      "bin/vault.js",
+      "test/vault.js",
+      "src/features.json"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "## Revue Phase C — graphe minimal Peter\n\n### Vue d'ensemble\nImplémentation propre et complète de la Phase C : `vault graph` (buildGraph + extraction vault/decisions/roadmap/sources/markdown/BMAD), `vault query` (keyword scoring borné), enrichissement PETER_REPORT.md (nœuds centraux, docs pivots, questions utiles), check graph.json dans staleVault. Fix parseArgs notable : le `filter(a => a !== 'vault')` supprimait le texte de requête quand l'utilisateur tapait `vault query vault` — corrigé en ne retirant que le premier positional 'vault'.\n\n### Commentaire inline (docs/handoffs/2026-05-03-vault-graph-phase-c.json:30)\nLe handoff JSON avait response.content null et integration null au moment de la review. Ce n'est pas un bug du code feature — c'est le format attendu pour un handoff en attente de review. Le validate-handoff.js vérifie ces champs uniquement lors du merge, pas lors de la création du handoff. Aucune action corrective requise sur le code.\n\n### Sur la question posée (extractConcepts + centralité)\n- `slugify` peut produire des collisions si deux labels normalisés convergent vers le même slug (ex: 'Phase C' et 'Phase-C' → même id). Risque faible en pratique sur des décisions/roadmap réels.\n- `GENERIC_CONCEPTS_EXTRACT` filtre les mots de liaison français mais pas tous : des mots courts utiles de 4 lettres comme 'done', 'test', 'hook' pourraient être créés comme concepts peu informatifs. Non bloquant.\n- Le calcul de centralité (degree + 2*decision + 2*roadmap) est déterministe et correct pour la Phase C. Les 'nœuds fantômes' (concept nodes créés mais avec 0 edges entrants) ne peuvent pas apparaître car un concept est toujours créé conjointement à un edge `mentions`.\n- Aucune régression identifiée. Tests 29/29. Gate CI verte."
+  },
+  "integration": {
+    "date": "2026-05-03",
+    "retained_implement": [
+      "Aucun fix code requis — Copilot confirme l'implémentation sans régression",
+      "Commentaire inline Copilot sur handoff JSON : comportement attendu (response.content null avant review), pas un bug",
+      "Note sur slugify collisions : risque faible, accepté Phase C, différé Phase D si nécessaire"
+    ],
+    "deferred": [
+      "Collisions slugify sur labels très proches : monitoring Phase D",
+      "GENERIC_CONCEPTS_EXTRACT : affinage si trop de concepts peu informatifs observés en usage réel"
+    ],
+    "verdict": "Phase C validée par Copilot sans régression. buildGraph, graphVault, queryVaultGraph, enrichissement PETER_REPORT et staleVault conformes au plan. Fix parseArgs critique intégré. 29/29 tests vault · 37/37 vault-update. Aucun fix correctif requis avant merge."
+  }
+}

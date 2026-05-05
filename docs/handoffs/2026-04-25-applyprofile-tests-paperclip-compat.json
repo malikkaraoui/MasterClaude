@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "subject": "applyProfile — tests unitaires + compatibilité PaperClip (README FR+EN)",
+    "date": "2026-04-25",
+    "type": "review",
+    "priority": "moyenne",
+    "reviewedRange": "20f7c58b16c5ea7c0d94fa6188063aba7b09e592..f444ff0c7351a09b5a0f513116732b321421228e"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Range couvre 6 commits depuis le dernier handoff intégré (merge #26). Commits feat/fix : (1) fix(hooks) model-metrics émet §1 entête même si METRICS vide (session compactée) ; (2) fix: appliquer review Copilot #26 — Array.isArray + JSDoc merge.js ; (3) feat(applyProfile): tests unitaires + compatibilité PaperClip (README FR+EN). Bilan : +382/-50 lignes sur 10 fichiers. Nouveaux livrables : test/apply-profile.js (16 tests custom runner sans framework externe, couvrant validation/settings/hooks/.mcp.json/dryRun), README enrichi de sections PaperClip (FR+EN) avec table profils et exemple JS. Contexte métier : @paperclipai/plugin-atelier consomme applyProfile() pour injecter la config claude-atelier dans les worktrees agents du fork PaperClip de Malik. Prochaine étape prévue : bump version stable (0.22.0) et publish npm.",
+    "question": "Les 16 tests de test/apply-profile.js utilisent top-level await séquentiel sans framework. Est-ce que la couverture est suffisante pour valider l'intégration PaperClip en production (pas de race condition, cas de concurrence worktree, ou edge case sur permissions fs non couverts) ? Et le README PaperClip est-il clair pour un développeur qui n'a jamais vu claude-atelier ?",
+    "filesToRead": [
+      "test/apply-profile.js",
+      "src/apply-profile.js",
+      "src/merge.js",
+      "src/profiles/index.js",
+      "README.md"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "La couverture actuelle est bonne pour valider le cœur fonctionnel de applyProfile() : les 16 tests couvrent les chemins critiques (validation, settings, hooks, .mcp.json, dryRun) et suffisent pour réduire fortement le risque de régression sur l'usage nominal PaperClip. Points faibles identifiés : (1) Aucune couverture de la branche skills/ (mergeSkills, namespace atelier-) — les skills sont copiés mais pas testés. (2) Pas de test de concurrence : avec un runner séquentiel top-level await, on valide uniquement le déterminisme mono-exécution ; deux applyProfile() parallèles sur le même cwd pourraient corrompre settings.json ou hooks/. (3) Absence de guard ESM dans le header du fichier de test. (4) Le handoff JSON lui-même avait response.content null, ce qui fait échouer validate-handoff. Verdict : suffisant pour merger et documenter le support PaperClip, insuffisant pour affirmer l'absence de race condition en production. Tests manquants prioritaires : exécutions concurrentes (même cible / cibles distinctes), idempotence, permissions fs dégradées, état partiellement écrit. README PaperClip : clair pour un développeur débutant si table profils + prérequis npm + exemple JS présents ; ajouter une phrase visible sur l'idempotence de applyProfile() serait un plus.",
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans docs/handoffs/2026-04-25-applyprofile-tests-paperclip-compat.json.\""
+  },
+  "integration": {
+    "retained_implement": "Ajout tests skills/ (atelier-token-routing, atelier-review-copilot) + test concurrence deux applyProfile() parallèles sur même cwd + guard ESM dans header test/apply-profile.js.",
+    "verdict": "3 lacunes adressées : couverture skills/, concurrence basique, guard ESM. Race condition complète (permissions dégradées, idempotence, état partiel) reste hors scope — documenté pour la prochaine itération."
+  }
+}

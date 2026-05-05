@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "subject": "Telegram Bridge Phase B — voix faster-whisper, Ollama polish, 9 bugs Copilot corrigés",
+    "date": "2026-05-04",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "facca3bd586ccbc56d8ef51308edeae2bc6a9234..cbe0df2bc772b733e6fbbaa21dd26e04a2e77aa8"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "3 commits feat/fix depuis le dernier handoff intégré (facca3bd). (1) fix b183c8c: 9 bugs de sécurité/robustesse issus de la review Copilot #47 — validate_project_dir corrigé (os.path.commonpath), ClaudeRunner utilise create_subprocess_exec sans shell, budget check retourne le nouveau total, TelegramBot.claude_runners keyed (user_id, project_dir), _parse_int_env pour env vars potentiellement vides, SessionManager.get_or_create retourne dict complet. (2) fix 4feefa2: correction reviewedRange handoff précédent (SHA main). (3) feat cbe0df2: Phase B complète — VoiceTranscriber (faster-whisper, lazy-load, asyncio.to_thread, device=cpu/int8), OllamaPolisher (httpx async, POST /api/generate, timeout 10s, fallback texte brut), handle_voice câblé dans TelegramBot (download ogg/mp3, transcription, polish, reply, run_command, inbox write type=vocal), handler filters.VOICE|filters.AUDIO enregistré dans run(). 4 smoke tests Phase B ajoutés dans test/telegram.test.js (17/17 passants). 332 lignes ajoutées sur 9 fichiers.",
+    "question": "La chaîne voix complète (download → transcribe asyncio.to_thread → polish httpx → reply → run_command → inbox write) est-elle robuste face aux cas de défaillance partielle : fichier temp non supprimé si transcription plante, réponse Ollama vide ou malformée, runner Claude qui timeout, inbox_writer.write qui lève une exception ? Est-ce que le cleanup du tmp_path dans le `finally` est suffisant, ou faut-il un try/except autour de inbox_writer.write également ?",
+    "filesToRead": [
+      "scripts/telegram-bridge.py",
+      "test/telegram.test.js",
+      "src/templates/telegram.env.example"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "Review Phase B Telegram Bridge : 6 points identifiés. (1) VoiceTranscriber.transcribe() itère segments dans l'event loop après asyncio.to_thread — le générateur faster-whisper décode pendant l'itération, bloquant asyncio. Fix : envelopper load+transcribe+join dans une fonction sync _run() appelée via to_thread. (2) download_to_drive hors du try/finally — fichier partiel non nettoyé si download échoue. Fix : inclure dans le try. (3) Aucun except autour transcription/polish — exception remonte silencieusement, utilisateur sans retour. Fix : try/except avec reply erreur explicite. (4) Retour silencieux si project_dir invalide après transcription réussie — comportement incohérent vs handle_message. Fix : reply explicite 'Use /cd first.'. (5) polished non tronqué avant reply_text — dépasse limite Telegram 4096 chars. Fix : polished[:4000]. (6) inbox_writer.write non protégé — mkdir hors try dans InboxWriter peut lever en cas de permissions/FS. Fix : wrap dans try/except avec logger.warning.",
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": {
+    "retained_implement": [
+      "VoiceTranscriber.transcribe() : segments consommés dans thread via _run() — évite blocage event loop",
+      "handle_voice : download_to_drive dans try/finally — cleanup garanti même si download partiel",
+      "handle_voice : try/except autour transcription/polish avec reply erreur et logger.error",
+      "handle_voice : reply explicite 'Use /cd first.' si project_dir invalide",
+      "handle_voice : polished[:4000] avant reply_text — respecte limite Telegram 4096 chars",
+      "handle_voice : inbox_writer.write() dans try/except — handler non planté si vault KO"
+    ],
+    "verdict": "Phase B robuste après 6 corrections Copilot. La chaîne voix complète (download → transcribe thread-safe → polish → reply → Claude → inbox) gère désormais tous les cas de défaillance partielle sans bloquer l'event loop ni planter l'handler. Les 6 fixes sont appliqués dans scripts/telegram-bridge.py."
+  }
+}

@@ -1,0 +1,29 @@
+/* Navbar — big emoji logo */
+.navbar-logo-emoji {
+  width: 36px !important;
+  height: 36px !important;
+  margin-right: 6px;
+}
+
+:root {
+  --ifm-color-primary: #4f86f7;
+  --ifm-color-primary-dark: #2a6ef5;
+  --ifm-color-primary-darker: #1a63f4;
+  --ifm-color-primary-darkest: #0a4fd8;
+  --ifm-color-primary-light: #749ef9;
+  --ifm-color-primary-lighter: #87abfa;
+  --ifm-color-primary-lightest: #b8cafe;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #4f86f7;
+  --ifm-color-primary-dark: #2a6ef5;
+  --ifm-color-primary-darker: #1a63f4;
+  --ifm-color-primary-darkest: #0a4fd8;
+  --ifm-color-primary-light: #749ef9;
+  --ifm-color-primary-lighter: #87abfa;
+  --ifm-color-primary-lightest: #b8cafe;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "subject": "Master daemon Phase E (E1→E5) + Telegram bidirectionnel Phases A→D",
+    "date": "2026-05-04",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "f82afc64cbd88373a2d171a831d98b8ae1ba7775..e15c3622f6dbfa1e9d5bb8baa0531527248b8138"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "5 commits depuis le dernier handoff : (1) fix Copilot #52 portabilité timeout FIFO macOS, (2) Telegram Phase A bidirectionnel via Ollama local /api/generate, (3) InboxWriter Peter — écrit vault/10-mailbox.md à chaque échange Telegram, (4) Phase D — signal file pour notifier Claude Code en temps réel, (5) Phase E Master daemon complet : bin/master.js (long-poll Telegram, lockfile anti-doublon, routing projets), src/master/{session-manager,vault-loader,context-monitor,index}.js, LaunchAgent com.claude-atelier.master (KeepAlive=true, TCC-safe via ~/.local/bin/launcher), commande CLI `claude-atelier master start|stop|restart|status`. Total : 980 lignes ajoutées / 26 fichiers.",
+    "question": "Le lockfile /tmp/claude-atelier-master.lock protège contre les instances dupliquées, mais si le processus crashe sans passer par process.on('exit') (SIGKILL, panic Node, reboot machine), le lockfile persiste et bloque le redémarrage automatique du LaunchAgent — est-ce que la logique de détection de PID mort (process.kill(pid, 0) catch) est suffisante pour récupérer ce cas, ou y a-t-il un scénario où le lockfile contient un PID recyclé par le noyau qui correspond à un autre processus vivant ?",
+    "filesToRead": [
+      "bin/master.js",
+      "src/master/session-manager.js",
+      "src/master/vault-loader.js",
+      "src/master/context-monitor.js",
+      "src/master/index.js",
+      "scripts/install-daemon.sh",
+      "scripts/claude-notify.sh"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "Réponse à la question lockfile/PID recyclé : Non, process.kill(pid, 0) n'est pas suffisant seul. Il vérifie uniquement l'existence du PID, pas l'identité du process. Si le master crashe (SIGKILL, reboot) et que le noyau recycle ce PID pour un autre process, kill(0) réussit et le LaunchAgent ne peut plus démarrer (blocage KeepAlive). Commentaires inline (10) : (1) src/master/index.js:50 — master start écrit PID_FILE sans vérifier que le daemon n'a pas immédiatement quitté, laisser un PID_FILE incohérent en cas de crash boot. (2) src/master/index.js:29 — isRunning basé sur kill(0) seul, vulnérable au PID recyclé. (3) scripts/mailbox-watcher.sh:43 — grep dans pipeline set -euo pipefail peut stopper le watcher si pas de ligne 'Résumé :', ajouter || true. (4) scripts/claude-notify.sh:32 — préfixe 'Claude :' toujours ajouté même si RESPONSE commence déjà par 'Claude :', doublon possible. (5) scripts/mailbox-watcher.sh:17 — même vulnérabilité PID recyclé que le lockfile master. (6) src/master/context-monitor.js:5 — commentaire 'résume + repart propre' trompeur, l'implémentation fait seulement une rotation. (7) src/master/session-manager.js:13 — process.env.HOME peut être undefined dans certains contextes launchctl. (8) src/master/vault-loader.js:20 — readFileSync sans try/catch, crash possible si fichier illisible (permissions TCC). (9) docs/handoffs — LaunchAgent plist mentionné mais pas dans le diff (installé localement via install-daemon.sh). (10) handoff JSON — response.content null ne passera pas validate-handoff.js.",
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": {
+    "retained_implement": "Tous les 8 fixes inline appliqués : isRunning + ps identity check (index.js), boot exit detection avec async await 250ms (index.js), os.homedir() fallback (session-manager.js), try/catch readFileSync (vault-loader.js), commentaire rotation corrigé (context-monitor.js), grep || true (mailbox-watcher.sh), lockfile identity check (mailbox-watcher.sh), strip prefix double (claude-notify.sh). Note handoff clarifiée : plist installé localement via install-daemon.sh, pas committé dans le repo.",
+    "verdict": "Tous les points Copilot traités. Fixes ciblés, pas de réécriture. La vulnérabilité PID recyclé est adressée dans index.js et mailbox-watcher.sh via vérification ps. La robustesse au crash boot de master start est améliorée via détection exit 250ms. Les 2 points sur le handoff JSON sont résolus par ce remplissage de response.content + integration."
+  }
+}

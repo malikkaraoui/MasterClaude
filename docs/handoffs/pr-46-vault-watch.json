@@ -1,0 +1,125 @@
+{
+  "pr_number": 46,
+  "title": "feat(vault): Lot 5 + Lot 8 — watch daemon + multi-format exports",
+  "branch": "feat/vault-watch",
+  "base": "main",
+  "summary": "Implements Lot 5 (vault watch daemon for incremental polling) and Lot 8 (6-format graph exports: HTML/D3.js, Obsidian, Wiki, SVG, GraphML, Neo4j Cypher).",
+  "files_changed": [
+    {
+      "path": "src/vault/watch.js",
+      "type": "new",
+      "purpose": "Core watcher module with watchOnce() for single cycles, watchStatus() for daemon status, and watchLoop() for background polling",
+      "key_functions": [
+        "watchOnce(vaultPath, updateFn, graphFn) — Synchronous cycle with SHA256 manifest hashing",
+        "watchStatus(vaultPath) — Check daemon status via PID",
+        "watchLoop(vaultPath, intervalSec, updateFn, graphFn) — Background polling with signal handling"
+      ]
+    },
+    {
+      "path": "bin/vault-watch.js",
+      "type": "new",
+      "purpose": "Daemon launcher script spawned detached from bin/vault.js",
+      "key_logic": "Parses --vault-path and --interval args, calls watchLoop() with polling interval clamped to min 5s"
+    },
+    {
+      "path": "bin/vault.js",
+      "type": "modified",
+      "purpose": "Added watch command dispatch and helper functions",
+      "changes": [
+        "Added imports: spawn from child_process, watchOnce/watchStatus from src/vault/watch.js",
+        "Added startVaultWatch(cwd, intervalSec) — spawns daemon detached with stdio:ignore",
+        "Added stopVaultWatch(cwd) — kills PID via SIGTERM, removes watch.json",
+        "Added onceVaultWatch(cwd) — synchronous cycle with update/graph callbacks",
+        "Added printWatch* functions for formatted output",
+        "Added 'watch' dispatch in runVault with actions: once|start|stop|status"
+      ]
+    },
+    {
+      "path": "test/vault.js",
+      "type": "modified",
+      "purpose": "Added 6 tests for Lot 5 + 7 tests for Lot 8 functionality",
+      "tests_lot5": [
+        "vault watch status sans daemon retourne { active: false }",
+        "vault watch status --json format validation",
+        "vault watch once execution synchrone",
+        "vault watch once --json format validation",
+        "vault watch stop error handling",
+        "vault watch start creates watch.json with pid"
+      ],
+      "tests_lot8": [
+        "vault export --html sans graph.json retourne erreur",
+        "vault export --html génère un fichier avec \"Peter Knowledge Graph\"",
+        "vault export --graphml génère un fichier avec balise <graphml",
+        "vault export --obsidian génère des fichiers .md dans vault/index/obsidian/",
+        "vault export --neo4j génère nodes.cypher et edges.cypher",
+        "vault export --svg génère un fichier SVG",
+        "vault export --wiki génère vault/index/wiki/index.md et répertoires par type"
+      ]
+    },
+    {
+      "path": "bin/vault.js",
+      "type": "modified_lot8",
+      "purpose": "Added 6 export format handlers (+541 lines for Lot 8)",
+      "export_functions": [
+        "exportHtmlGraph(cwd, graph) — D3.js force-directed interactive graph (1200x900px SVG, hover, click highlighting, legend)",
+        "exportObsidianVault(cwd, graph) — ~500 .md files with bidirectional links [[id]] syntax, valid types filter",
+        "exportWikiVault(cwd, graph) — Hierarchical Markdown structure with index.md + per-type subdirectories",
+        "exportSvgGraph(cwd, graph) — Circular static layout (central nodes inner 150px, others 400px radius)",
+        "exportGraphML(cwd, graph) — XML standard format with proper entity escaping (&quot;, &lt;, &gt;)",
+        "exportNeo4jCypher(cwd, graph) — Cypher CREATE statements with sharding (max 10k per file) + import.sh",
+        "exportVault(cwd, format) — Orchestrator checking graph.json exists, dispatching to handler",
+        "printExport(result, format, cwd) — Colored CLI feedback per format"
+      ],
+      "dispatch_logic": "Added 'export' subcommand dispatch checking argv for --html/--obsidian/--wiki/--svg/--graphml/--neo4j flags"
+    }
+  ],
+  "architecture": {
+    "polling_strategy": "File hashing via SHA256 of all vault/*.md files, stored in .peter/state.json lastWatchManifest",
+    "daemon_lifecycle": "spawn detached + stdio:ignore, PID file in .peter/watch.json, SIGTERM cleanup",
+    "intervals": "Configurable via --interval, clamped to min 5s, max ~30s default",
+    "event_logging": "Appends to .peter/events.jsonl with watch_cycle events including elapsed, changedFiles, updateOk, graphOk"
+  },
+  "test_coverage": {
+    "total_vault_tests": 57,
+    "lot5_tests": 6,
+    "lot8_tests": 7,
+    "graph_tests": 8,
+    "passing": "57/57",
+    "gate_status": "PASSED — secrets, lint, build, tests all clean"
+  },
+  "review_focus": [
+    "Lot 5 — Daemon spawning logic: verify detached and stdio handling is correct",
+    "Lot 5 — PID checking: process.kill(pid, 0) for validation",
+    "Lot 5 — Signal handlers: SIGTERM/SIGINT cleanup in watchLoop",
+    "Lot 5 — File hashing: SHA256 manifest comparison for change detection",
+    "Lot 5 — Test isolation: ensure daemon processes don't leak between tests",
+    "Lot 8 — D3.js CDN usage and graph data embedding in HTML template",
+    "Lot 8 — XML/Cypher escaping: proper entity encoding (&quot;, &lt;, &gt;) and string escaping",
+    "Lot 8 — SVG circular layout: central nodes positioning (inner 150px radius), outer nodes (400px)",
+    "Lot 8 — File path handling: sanitizeFilename() for special char replacement (:/?*\"<>|)",
+    "Lot 8 — Graph.json presence check and graceful error handling when missing"
+  ],
+  "integration_points": [
+    "Lot 5 — Calls updateVault() and graphVault() callbacks when changes detected",
+    "Lot 5 — Uses existing vault/.peter/ directory for state and config storage",
+    "Lot 5 — Compatible with vault update/graph commands for incremental rebuilds",
+    "Lot 8 — Reads graph.json (703 nodes, 1440 edges in real env)",
+    "Lot 8 — Generates exports to vault/index/{html,obsidian,wiki,svg,graphml,neo4j}/",
+    "Lot 8 — All formats use node:fs native modules only (no npm deps)"
+  ],
+  "export_specifications": {
+    "html": "D3.js force-directed graph (237 KB generated), 1200x900px SVG with zoom/pan/hover/click",
+    "obsidian": "~500 .md files max with bidirectional [[id]] links, supports vault types",
+    "wiki": "Hierarchical index.md + type subdirectories, suitable for wiki software",
+    "svg": "Static circular layout (273 KB), central nodes inner circle (150px), others (400px radius)",
+    "graphml": "XML standard (451 KB), Gephi/Cytoscape compatible, full entity escaping",
+    "neo4j": "Cypher scripts (sharded 10k per file), import.sh automation included"
+  },
+  "next_steps_if_approved": [
+    "Merge to main",
+    "Bump version in package.json and bin/cli.js (currently v0.23.10)",
+    "Verify npm publish with new version (tests will run on CI first)",
+    "Update website/docs/ with new `vault export` usage examples",
+    "Consider Lot 9 (interactive graph UI) or next Phase D task"
+  ]
+}

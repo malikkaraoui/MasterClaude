@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "subject": "[SUJET]",
+    "date": "YYYY-MM-DD",
+    "type": "review",
+    "priority": "moyenne",
+    "reviewedRange": "sha-from..sha-to"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "3-5 phrases max. Qu'est-ce qui a été fait, où en est-on.",
+    "question": "UNE question claire. Pas 10.",
+    "filesToRead": [
+      "src/fr/CLAUDE.md"
+    ],
+    "constraints": [
+      "Ne pas modifier le code source",
+      "Rester dans le périmètre défini"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content' de ce fichier JSON. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}

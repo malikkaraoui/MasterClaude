@@ -1,0 +1,84 @@
+# Node / NPM
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build / Dist
+dist/
+build/
+*.tgz
+
+# Go binaries
+scripts/ollama-proxy/ollama-proxy
+
+# Env / Secrets (parano par défaut — voir src/fr/security/)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+*credentials*.json
+*secret*.json
+*token*.json
+serviceAccountKey.json
+google-services.json
+GoogleService-Info.plist
+.aws/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs / DB locales
+*.log
+*.sqlite
+*.db
+
+# Tests / Coverage
+coverage/
+.nyc_output/
+
+# Documents de travail personnels (non versionnés)
+ios_vscode_claude_workflow_v4.md
+BUILD_FFI_TROUBLESHOOTING.md
+TOM-TVOS-NODE-PLAN.md
+workflow-vscode-xcode.md
+
+# Claude Code runtime (local state, pas versionné)
+.claude/projects/
+.claude/todos/
+.claude/shell-snapshots/
+.claude/scheduled_tasks.lock
+watchdog-report-*.txt
+.claude/worktrees/
+
+# Memory SQLite database (local, not tracked)
+.claude/memory.db
+.claude/memory.db-wal
+.claude/memory.db-shm
+
+# Peter vault — sorties générées (rebuil local via vault update)
+vault/index/
+vault/.peter/
+
+# Git worktrees isolés
+.worktrees/

@@ -1,0 +1,283 @@
+{
+  "version": 1,
+  "groups": {
+    "runtime": {
+      "label": "Runtime",
+      "features": ["header", "ollama_status", "model_routing_hints", "session_length_warning"]
+    },
+    "qualite": {
+      "label": "Qualité",
+      "features": ["review_copilot", "stack_detection", "design_detection", "diagnostic", "anti_loop"]
+    },
+    "guards_git": {
+      "label": "Guards Git",
+      "features": ["git_guard_sign", "git_guard_french", "git_guard_tests"]
+    },
+    "skills_outils": {
+      "label": "Skills & Outils",
+      "features": ["skill_bmad", "skill_design_promax", "skill_qmd", "skill_copilot_loop", "skill_ollama_router"]
+    },
+    "copilot_loop": {
+      "label": "Copilot Loop",
+      "features": ["auto_merge_after_review"]
+    },
+    "orchestration": {
+      "label": "Orchestration",
+      "features": ["pulse", "pulse_header", "marketplace_watch"]
+    },
+    "entete": {
+      "label": "Format entête §1",
+      "features": ["header_show_date", "header_show_time", "header_show_model", "header_show_pastille", "header_show_mode", "header_show_ollama", "header_show_proxy", "pulse_header"]
+    }
+  },
+  "features": {
+    "header": {
+      "label": "Entête §1",
+      "description": "Heure + modèle + pastille en tête de chaque réponse",
+      "default": true
+    },
+    "ollama_status": {
+      "label": "Statut Ollama",
+      "description": "Statut du service Ollama local à chaque message",
+      "default": true
+    },
+    "model_routing_hints": {
+      "label": "Routing modèle",
+      "description": "Suggestions Haiku si exploration, alerte Opus sur tâche courte",
+      "default": true
+    },
+    "session_length_warning": {
+      "label": "Alerte longueur session",
+      "description": "Avertissement si contexte > seuil KB",
+      "default": true
+    },
+    "review_copilot": {
+      "label": "Review §25 auto",
+      "description": "Handoff review Copilot/GPT si feat terminée ou seuil lignes atteint",
+      "default": true
+    },
+    "stack_detection": {
+      "label": "Détection stack",
+      "description": "Active l'agent spécialisé (Steve, Gaëlle…) selon la stack",
+      "default": true
+    },
+    "design_detection": {
+      "label": "Détection design",
+      "description": "Propose Séréna si besoin UI/UX/design détecté",
+      "default": true
+    },
+    "diagnostic": {
+      "label": "Diagnostic périodique",
+      "description": "Vérification QMD / §0 / gate à intervalle configurable",
+      "default": true
+    },
+    "anti_loop": {
+      "label": "Anti-boucle",
+      "description": "Détecte N échecs consécutifs identiques et bloque",
+      "default": true
+    },
+    "git_guard_sign": {
+      "label": "Guard: no-sign",
+      "description": "Bloque git commit signé (Co-Authored-By / Signed-off-by)",
+      "default": true
+    },
+    "git_guard_french": {
+      "label": "Guard: commits FR",
+      "description": "Messages de commit en français obligatoires",
+      "default": true
+    },
+    "git_guard_tests": {
+      "label": "Guard: tests avant push",
+      "description": "npm test doit passer avant git push",
+      "default": true
+    },
+    "skill_bmad": {
+      "label": "BMAD Method",
+      "description": "Cycle complet analyse→plan→archi→implem pour gros projets",
+      "default": false
+    },
+    "skill_design_promax": {
+      "label": "UI/UX Pro Max (Séréna)",
+      "description": "Propose Séréna chef designer + installe UI/UX Pro Max si besoin design",
+      "default": true
+    },
+    "skill_qmd": {
+      "label": "QMD — recherche markdown",
+      "description": "Moteur de recherche local .md hybride (mcp__qmd) — QMD-first obligatoire si actif",
+      "default": true
+    },
+    "skill_copilot_loop": {
+      "label": "Copilot Loop",
+      "description": "Loop autonome PR→Copilot review→handoff JSON→fixes→merge",
+      "default": false
+    },
+    "skill_ollama_router": {
+      "label": "Ollama Router",
+      "description": "Setup et routing automatique Ollama local (proxy :4000)",
+      "default": true
+    },
+    "auto_merge_after_review": {
+      "label": "Auto-merge après review",
+      "description": "Merge automatiquement dans merge_target_branch après intégration Copilot + CI verte",
+      "default": false
+    },
+    "header_show_date": {
+      "label": "Entête: date",
+      "description": "Afficher la date YYYY-MM-DD dans l'entête §1 (hook à câbler séparément)",
+      "default": true
+    },
+    "header_show_time": {
+      "label": "Entête: heure",
+      "description": "Afficher l'heure HH:MM:SS dans l'entête §1",
+      "default": true
+    },
+    "header_show_model": {
+      "label": "Entête: modèle",
+      "description": "Afficher le model-id dans l'entête §1",
+      "default": true
+    },
+    "header_show_pastille": {
+      "label": "Entête: pastille métriques",
+      "description": "Afficher la pastille ⬆️/⬇️/🟢 dans l'entête §1",
+      "default": true
+    },
+    "header_show_mode": {
+      "label": "Entête: mode A/M",
+      "description": "Afficher le mode (A=auto, M=manuel) dans l'entête §1",
+      "default": true
+    },
+    "header_show_ollama": {
+      "label": "Entête: statut Ollama",
+      "description": "Afficher 🦙✅/❌ dans l'entête §1",
+      "default": true
+    },
+    "header_show_proxy": {
+      "label": "Entête: statut proxy",
+      "description": "Afficher 🔌✅/❌ (proxy :4000) dans l'entête §1",
+      "default": true
+    },
+    "pulse": {
+      "label": "Pulse multi-agents",
+      "description": "Système de présence multi-agents (pouls.md) avec Maestro §0 watcher",
+      "default": true
+    },
+    "pulse_header": {
+      "label": "Entête: pastille pouls",
+      "description": "Afficher 💓{niveau}·{n}/{total} dans l'entête §1",
+      "default": true
+    },
+    "marketplace_watch": {
+      "label": "Veille marketplace",
+      "description": "Daemon léger lié au pouls : scan périodique, purge des offres ouvertes stale publiées par nous, pénalité anti-spam et détection d'offres pertinentes",
+      "default": false
+    }
+  },
+  "params": {
+    "handoff_threshold_lines": {
+      "label": "Seuil handoff §25",
+      "description": "Lignes modifiées avant handoff review obligatoire",
+      "default": 100,
+      "unit": "lignes",
+      "min": 10,
+      "max": 1000
+    },
+    "context_warning_kb": {
+      "label": "Alerte contexte (1er)",
+      "description": "Seuil d'alerte jaune pour la longueur de session",
+      "default": 300,
+      "unit": "KB",
+      "min": 50,
+      "max": 2000
+    },
+    "context_critical_kb": {
+      "label": "Alerte contexte (critique)",
+      "description": "Seuil d'alerte rouge — /compact fortement recommandé",
+      "default": 600,
+      "unit": "KB",
+      "min": 100,
+      "max": 4000
+    },
+    "anti_loop_count": {
+      "label": "Anti-boucle : seuil",
+      "description": "Nombre d'échecs identiques consécutifs avant blocage",
+      "default": 3,
+      "unit": "échecs",
+      "min": 2,
+      "max": 10
+    },
+    "diagnostic_interval_min": {
+      "label": "Intervalle diagnostic",
+      "description": "Fréquence de vérification QMD / §0 / gate",
+      "default": 30,
+      "unit": "min",
+      "min": 5,
+      "max": 120
+    },
+    "merge_target_branch": {
+      "label": "Branche cible auto-merge",
+      "description": "Branche dans laquelle merger après review Copilot (auto_merge_after_review)",
+      "type": "string",
+      "default": "main"
+    },
+    "copilot_loop_poll_sec": {
+      "label": "Intervalle polling Copilot Loop",
+      "description": "Délai entre deux vérifications de review Copilot (ScheduleWakeup)",
+      "default": 300,
+      "unit": "sec",
+      "min": 60,
+      "max": 1800
+    },
+    "copilot_loop_max_attempts": {
+      "label": "Tentatives max Copilot Loop",
+      "description": "Nombre de polls avant abandon et notification manuelle",
+      "default": 12,
+      "unit": "tentatives",
+      "min": 3,
+      "max": 48
+    },
+    "marketplace_agent_id": {
+      "label": "Marketplace: agent id",
+      "description": "Identité locale sur la marketplace (format projet@user)",
+      "type": "string",
+      "default": ""
+    },
+    "marketplace_repo_path": {
+      "label": "Marketplace: repo path",
+      "description": "Chemin local vers le checkout git du repo marketplace",
+      "type": "string",
+      "default": ""
+    },
+    "marketplace_watch_poll_sec": {
+      "label": "Marketplace: intervalle veille",
+      "description": "Délai entre deux scans marketplace par le watcher lié au pouls",
+      "default": 15,
+      "unit": "sec",
+      "min": 5,
+      "max": 300
+    },
+    "marketplace_stale_open_sec": {
+      "label": "Marketplace: délai stale",
+      "description": "Au-delà de ce délai sans preneur, une annonce ouverte publiée par nous est purgeée et pénalisée",
+      "default": 120,
+      "unit": "sec",
+      "min": 30,
+      "max": 1800
+    },
+    "marketplace_spam_penalty": {
+      "label": "Marketplace: pénalité spam",
+      "description": "Points retirés à la réputation quand une annonce stale reste ouverte jusqu'à purge automatique",
+      "default": 5,
+      "unit": "pts",
+      "min": 1,
+      "max": 100
+    },
+    "marketplace_spam_soft_limit": {
+      "label": "Marketplace: seuil spam",
+      "description": "Nombre de pénalités stale avant marquage indisponible de l'agent",
+      "default": 3,
+      "unit": "pénalités",
+      "min": 1,
+      "max": 20
+    }
+  }
+}

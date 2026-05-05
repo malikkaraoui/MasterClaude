@@ -1,0 +1,47 @@
+{
+  "title": "Lot 3 — vault path, explain, communautés",
+  "author": "Claude Code (Haiku 4.5)",
+  "date": "2026-05-04",
+  "phase": "Phase 2",
+  "scope": "Vault feature completion — three core commands",
+  "summary": "Implements vault path (BFS shortest path), vault explain (node descriptions), and automatic community detection in graph.json",
+  "commits": [
+    "40ebd1c feat(vault): ajoute vault path — BFS plus court chemin entre nœuds"
+  ],
+  "files_modified": [
+    "bin/vault.js",
+    "test/vault.js"
+  ],
+  "files_added": [],
+  "test_status": "44 passing (35 existing + 9 new)",
+  "breaking_changes": false,
+  "dependencies_changed": false,
+  "code_quality": {
+    "test_coverage": "Comprehensive — path nominal/edge cases, explain text/JSON, community detection, error handling",
+    "native_modules_only": true,
+    "backward_compatible": true,
+    "review_focus": [
+      "BFS algorithm correctness for bidirectional graphs",
+      "Node lookup flexibility (exact ID vs partial label match)",
+      "Community detection accuracy and performance",
+      "JSON output format consistency with existing commands",
+      "Error handling for unknown nodes"
+    ]
+  },
+  "implementation_summary": {
+    "vault_path": "BFS-based shortest path calculator. Nodes resolved by exact ID or partial label match. Handles both forward and reverse edges for undirected semantics. Supports --json output.",
+    "vault_explain": "Natural language generator for nodes. Lists all incoming/outgoing neighbors with edge labels. Supports --json output with structured neighbor data.",
+    "communities": "Connected components detection via BFS. Each node enriched with community ID. Graph stats include community count and byId breakdown."
+  },
+  "next_steps": [
+    "PR created in draft status",
+    "Move PR to ready_for_review",
+    "Copilot review integration (if applicable)",
+    "Plan Phase C (graphe minimal enhancements) or next feature"
+  ],
+  "risks": [
+    "BFS performance on large graphs (mitigated by test coverage)",
+    "Node lookup ambiguity if multiple labels match (resolved by exact ID priority)",
+    "Community detection correctness (verified by connected component tests)"
+  ]
+}
