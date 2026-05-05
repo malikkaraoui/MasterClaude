@@ -167,7 +167,7 @@ async function askClaude(userMsg, projectKey) {
   const prompt = relevant
     ? `${system}\n\n[Mémoire pertinente]\n${relevant}\n\n${userMsg}`
     : `${system}\n\n${userMsg}`;
-  const args = ['--print', '--output-format', 'text', '--continue', '-p', prompt];
+  const args = ['--print', '--output-format', 'text', '--dangerously-skip-permissions', '--continue', '-p', prompt];
   const childEnv = { ...process.env };
   delete childEnv.ANTHROPIC_API_KEY; // Claude Code utilise OAuth Max plan, pas la clé API
 
@@ -198,12 +198,12 @@ async function askClaude(userMsg, projectKey) {
   });
 }
 
-// --- Spawn session Claude sur un projet (non-bloquant) ---
+// --- Spawn session Claude sur un projet — outils complets, zéro confirmation ---
 function spawnProjectSession(projectPath, prompt) {
   return new Promise((resolve) => {
     const childEnv2 = { ...process.env };
     delete childEnv2.ANTHROPIC_API_KEY;
-    const proc = spawn('claude', ['--print', '--output-format', 'text', '-p', prompt], {
+    const proc = spawn('claude', ['--print', '--output-format', 'text', '--dangerously-skip-permissions', '-p', prompt], {
       cwd: projectPath,
       encoding: 'utf8',
       env: childEnv2,
@@ -212,8 +212,29 @@ function spawnProjectSession(projectPath, prompt) {
     proc.stdout.on('data', d => out += d);
     proc.on('close', () => resolve(out.trim()));
     proc.on('error', e => resolve(`❌ Erreur session : ${e.message}`));
-    setTimeout(() => { proc.kill(); resolve('⏱ Timeout session projet'); }, 60000);
+    setTimeout(() => { proc.kill(); resolve('⏱ Timeout session projet (180s)'); }, 180000);
   });
+}
+
+// --- Fire RemoteTrigger via subprocess Claude (OAuth géré par Claude Code) ---
+const TRIGGER_ID = 'trig_01EqojHMK51LYBH47fxghF2s';
+function fireTrigger(task, chatId, botToken) {
+  const triggerPrompt = `Utilise l'outil RemoteTrigger pour mettre à jour puis lancer le trigger "${TRIGGER_ID}".
+D'abord, update le trigger avec ce contenu de tâche :
+TGTOKEN=${botToken} TGCHATID=${chatId} MESSAGE=${task}
+
+Ensuite, run le trigger immédiatement. Ne génère aucune réponse conversationnelle — ton seul rôle est d'invoquer RemoteTrigger.`;
+
+  const childEnv3 = { ...process.env };
+  delete childEnv3.ANTHROPIC_API_KEY;
+  // Micro-subprocess uniquement pour invoquer RemoteTrigger (pas de --continue, pas de contexte lourd)
+  const proc = spawn('claude', ['--print', '--output-format', 'text', '--dangerously-skip-permissions', '-p', triggerPrompt], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: childEnv3,
+  });
+  proc.on('error', e => process.stderr.write(`[trigger] erreur: ${e.message}\n`));
+  setTimeout(() => proc.kill(), 30000);
 }
 
 // --- Commandes système ---
@@ -223,7 +244,9 @@ const HELP = `Commandes Master :
 /projet <nom|chemin> — activer un projet
 /projet off — revenir en mode global
 /register <nom> <chemin> — enregistrer un projet
-/reset — vider l'historique de la session`;
+/reset — vider l'historique de la session
+/run <tâche> — exécute une tâche (outils complets) sur le projet actif
+/trigger <tâche> — lance RemoteTrigger cloud (Bash complet, répond ici directement)`;
 
 function handleSystemCommand(text) {
   if (text === '/start' || text === '/help') return HELP;
@@ -296,11 +319,21 @@ while (running) {
         continue;
       }
 
-      // Commande projet direct : /run <prompt> → spawn claude sur projet actif
-      if (text.startsWith('/run ') && sessions.active) {
+      // /trigger <tâche> → RemoteTrigger cloud (Claude complet avec Bash, répond directement à Telegram)
+      if (text.startsWith('/trigger ')) {
+        const task = text.slice(9).trim();
+        await send(`🚀 Lancement RemoteTrigger cloud… La réponse arrive directement ici.`);
+        fireTrigger(task, CHAT_ID, TOKEN);
+        continue;
+      }
+
+      // Commande projet direct : /run <prompt> → spawn claude sur projet actif (outils complets)
+      if (text.startsWith('/run ')) {
         const prompt = text.slice(5).trim();
-        await send(`⚙️ Lancement sur ${sessions.active.name}…`);
-        const result = await spawnProjectSession(sessions.active.path, prompt);
+        const projectPath = sessions.active ? sessions.active.path : ROOT;
+        const projectName = sessions.active ? sessions.active.name : 'MasterClaude';
+        await send(`⚙️ Lancement sur ${projectName} (outils complets)…`);
+        const result = await spawnProjectSession(projectPath, prompt);
         await send(result || '✅ Terminé (pas de sortie)').catch(() => {});
         continue;
       }
