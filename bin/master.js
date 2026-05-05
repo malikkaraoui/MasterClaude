@@ -8,7 +8,7 @@
 
 import https from 'node:https';
 import { readFileSync, existsSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir } from 'node:fs';
@@ -113,16 +113,47 @@ function buildSystemPrompt() {
   ].filter(Boolean).join('\n\n');
 }
 
-// Répertoires de session par clé — Claude Code gère l'historique nativement (--continue)
-const SESSION_DIRS = new Map();
-
+// Session globale = ROOT (CLAUDE.md + hooks actifs = vraie session projet)
+// Sessions projet = répertoire du projet concerné
 function getSessionDir(projectKey) {
-  if (!SESSION_DIRS.has(projectKey)) {
-    const dir = join(ROOT, 'sessions', projectKey.replace(/[^a-z0-9_-]/gi, '_'));
-    _mkdir(dir, { recursive: true });
-    SESSION_DIRS.set(projectKey, dir);
+  if (projectKey === 'global') return ROOT;
+  const dir = join(ROOT, 'sessions', projectKey.replace(/[^a-z0-9_-]/gi, '_'));
+  _mkdir(dir, { recursive: true });
+  return dir;
+}
+
+// --- Git natif (zéro délégation à Claude) ---
+function gitRun(...args) {
+  const r = spawnSync(args[0], args.slice(1), { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+  return ((r.stdout || '') + (r.stderr || '')).trim();
+}
+
+function handleGitCommand(text) {
+  const t = text.trim();
+  if (/^\/?(git\s+)?status$/i.test(t) || t === '/gs') {
+    const out = gitRun('git', 'status', '--short') || '✅ Working tree propre';
+    const branch = gitRun('git', 'branch', '--show-current');
+    const log = gitRun('git', 'log', '--oneline', '-3');
+    return `🌿 ${branch}\n${out}\n\n${log}`;
   }
-  return SESSION_DIRS.get(projectKey);
+  if (/^\/?(git\s+)?log$/i.test(t) || t === '/gl') {
+    return gitRun('git', 'log', '--oneline', '-10');
+  }
+  if (/^\/?(git\s+)?diff$/i.test(t)) {
+    return gitRun('git', 'diff', '--stat') || '✅ Pas de diff';
+  }
+  const commitMatch = t.match(/^\/?(git\s+)?commit\s+(.+)$/i);
+  if (commitMatch) {
+    gitRun('git', 'add', '-A');
+    return gitRun('git', 'commit', '-m', commitMatch[2].trim());
+  }
+  if (/^\/?(git\s+)?push$/i.test(t)) {
+    const r = spawnSync('bash', ['scripts/pre-push-gate.sh'], { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+    const gate = ((r.stdout || '') + (r.stderr || '')).trim();
+    if (!gate.includes('GATE PASSEE')) return `🚫 Gate échouée :\n${gate.slice(0, 400)}`;
+    return gitRun('git', 'push');
+  }
+  return null;
 }
 
 // --- Appel claude CLI — RAG memory (top-K échanges pertinents) + --continue ---
@@ -147,11 +178,13 @@ async function askClaude(userMsg, projectKey) {
     await send('⚙️ Je traite, ça prend un moment…').catch(() => {});
   }, 8000);
 
-  // Heartbeat toutes les 30s
+  // Heartbeat toutes les 30s — s'arrête à 110s pour éviter race avec timeout 120s
   let heartbeatCount = 0;
   const heartbeat = setInterval(async () => {
     heartbeatCount++;
-    await send(`⏳ Toujours en cours… (${heartbeatCount * 30}s)`).catch(() => {});
+    const elapsed = heartbeatCount * 30;
+    if (elapsed >= 110) return; // laisser le timeout envoyer le message final
+    await send(`⏳ Toujours en cours… (${elapsed}s)`).catch(() => {});
   }, 30000);
 
   return new Promise((resolve) => {
@@ -246,6 +279,13 @@ while (running) {
       const sysReply = handleSystemCommand(text);
       if (sysReply) {
         await send(sysReply).catch(() => {});
+        continue;
+      }
+
+      // Commandes git natives (résultats garantis, zéro hallucination)
+      const gitReply = handleGitCommand(text);
+      if (gitReply !== null) {
+        await send(gitReply).catch(() => {});
         continue;
       }
 
