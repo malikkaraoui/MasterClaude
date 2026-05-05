@@ -45,6 +45,9 @@ function loadEnv(path) {
 loadEnv(join(ROOT, '.env'));
 loadEnv(join(ROOT, '.env.local'));
 
+// Claude Code utilise OAuth Max plan — la clé API ne doit JAMAIS être héritée par les enfants
+delete process.env.ANTHROPIC_API_KEY;
+
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || '');
 const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || '/Users/malik/Vault/Malik';
@@ -102,6 +105,7 @@ function buildSystemPrompt() {
   return [
     'Tu es MasterClaude — assistant IA personnel de Malik, chef d\'orchestre de tous ses projets.',
     'Tu réponds en français, de façon directe et concise.',
+    'IMPORTANT : Malik t\'écrit via Telegram (interface chat, pas un terminal). Tu ne dois JAMAIS lui demander de lancer une commande ou un script. Si tu as besoin d\'exécuter quelque chose pour répondre, tu le fais toi-même via tes outils et tu lui donnes directement le résultat.',
     'Tu peux lancer des actions sur les projets si demandé (spawn claude session).',
     activeProject,
     vaultCtx ? `[Vault Obsidian — contexte global]\n${vaultCtx}` : '',
@@ -126,6 +130,9 @@ async function askClaude(userMsg, projectKey) {
   const sessionDir = getSessionDir(projectKey);
   const system = buildSystemPrompt();
   const relevant = await memory.retrieve(projectKey, userMsg);
+  if (relevant) {
+    process.stdout.write(`[memory] ${relevant.length} chars injectés (key=${projectKey})\n`);
+  }
   const prompt = relevant
     ? `${system}\n\n[Mémoire pertinente]\n${relevant}\n\n${userMsg}`
     : `${system}\n\n${userMsg}`;
@@ -133,13 +140,28 @@ async function askClaude(userMsg, projectKey) {
   const childEnv = { ...process.env };
   delete childEnv.ANTHROPIC_API_KEY; // Claude Code utilise OAuth Max plan, pas la clé API
 
+  // Ack immédiat si la réponse tarde (> 8s)
+  let ackSent = false;
+  const ackTimer = setTimeout(async () => {
+    ackSent = true;
+    await send('⚙️ Je traite, ça prend un moment…').catch(() => {});
+  }, 8000);
+
+  // Heartbeat toutes les 30s
+  let heartbeatCount = 0;
+  const heartbeat = setInterval(async () => {
+    heartbeatCount++;
+    await send(`⏳ Toujours en cours… (${heartbeatCount * 30}s)`).catch(() => {});
+  }, 30000);
+
   return new Promise((resolve) => {
     const proc = spawn('claude', args, { cwd: sessionDir, encoding: 'utf8', env: childEnv });
     let out = '';
+    const cleanup = () => { clearTimeout(ackTimer); clearInterval(heartbeat); };
     proc.stdout.on('data', d => out += d);
-    proc.on('close', () => resolve(out.trim()));
-    proc.on('error', e => resolve(`❌ Erreur CLI : ${e.message}`));
-    setTimeout(() => { proc.kill(); resolve('⏱ Timeout'); }, 60000);
+    proc.on('close', () => { cleanup(); resolve(out.trim()); });
+    proc.on('error', e => { cleanup(); resolve(`❌ Erreur CLI : ${e.message}`); });
+    setTimeout(() => { cleanup(); proc.kill(); resolve('⏱ Timeout (120s)'); }, 120000);
   });
 }
 
@@ -181,8 +203,12 @@ function handleSystemCommand(text) {
   return null;
 }
 
-// --- Main ---
+// --- Offset persistant (évite double-traitement au redémarrage) ---
+const OFFSET_FILE = '/tmp/masterclaude-tg-offset';
 let offset = 0;
+try { offset = parseInt(_rfs(OFFSET_FILE, 'utf8').trim(), 10) || 0; } catch {}
+function saveOffset(v) { try { _wfs(OFFSET_FILE, `${v}\n`); } catch {} }
+
 let running = true;
 
 process.on('SIGTERM', async () => {
@@ -207,6 +233,7 @@ while (running) {
 
     for (const upd of data.result) {
       offset = upd.update_id + 1;
+      saveOffset(offset);
 
       const msg = upd.message;
       if (!msg?.text) continue;
