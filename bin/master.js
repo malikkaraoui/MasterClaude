@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir } from 'node:fs';
 import { loadVaultBrief } from '../src/master/vault-loader.js';
 import { SessionManager } from '../src/master/session-manager.js';
+import { MemoryStore } from '../src/master/memory-store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -54,6 +55,7 @@ if (!TOKEN || !CHAT_ID) {
 }
 
 const sessions = new SessionManager();
+const memory = new MemoryStore();
 
 // --- Telegram ---
 function tgPost(method, data) {
@@ -119,12 +121,14 @@ function getSessionDir(projectKey) {
   return SESSION_DIRS.get(projectKey);
 }
 
-// --- Appel claude CLI avec --continue : zéro réinjection d'historique ---
-function askClaude(userMsg, projectKey) {
+// --- Appel claude CLI — RAG memory (top-K échanges pertinents) + --continue ---
+async function askClaude(userMsg, projectKey) {
   const sessionDir = getSessionDir(projectKey);
   const system = buildSystemPrompt();
-  const prompt = `${system}\n\n${userMsg}`;
-  // --continue reprend la dernière conversation du répertoire (historique géré par Claude Code)
+  const relevant = await memory.retrieve(projectKey, userMsg);
+  const prompt = relevant
+    ? `${system}\n\n[Mémoire pertinente]\n${relevant}\n\n${userMsg}`
+    : `${system}\n\n${userMsg}`;
   const args = ['--print', '--output-format', 'text', '--continue', '-p', prompt];
 
   return new Promise((resolve) => {
@@ -237,6 +241,7 @@ while (running) {
           await send(reply).catch(e =>
             process.stderr.write(`[master] erreur send: ${e.message}\n`)
           );
+          memory.store(projectKey, text, reply).catch(() => {});
           process.stdout.write('[master] répondu\n');
         }
       } catch (apiErr) {
