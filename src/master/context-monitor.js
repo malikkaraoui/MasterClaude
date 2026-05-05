@@ -34,7 +34,12 @@ export class ContextMonitor {
     }
   }
 
-  // Formate l'historique en contexte textuel pour claude --print
+  // Retourne le tableau messages[] brut pour l'API Anthropic
+  getMessages(projectKey) {
+    return [...this._get(projectKey).history];
+  }
+
+  // Formate l'historique en contexte textuel (fallback)
   getContext(projectKey) {
     const s = this._get(projectKey);
     if (!s.history.length) return '';

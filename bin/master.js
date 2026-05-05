@@ -8,10 +8,11 @@
 
 import https from 'node:https';
 import { readFileSync, existsSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink } from 'node:fs';
+import Anthropic from '@anthropic-ai/sdk';
 import { loadVaultBrief } from '../src/master/vault-loader.js';
 import { SessionManager } from '../src/master/session-manager.js';
 import { ContextMonitor } from '../src/master/context-monitor.js';
@@ -20,7 +21,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
 // --- Lockfile : une seule instance ---
-const LOCKFILE = '/tmp/claude-atelier-master.lock';
+const LOCKFILE = '/tmp/masterclaude-master.lock';
 if (_exists(LOCKFILE)) {
   const pid = parseInt(_rfs(LOCKFILE, 'utf8').trim(), 10);
   try {
@@ -54,6 +55,7 @@ if (!TOKEN || !CHAT_ID) {
   process.exit(1);
 }
 
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const sessions = new SessionManager();
 const ctx = new ContextMonitor();
 
@@ -91,30 +93,52 @@ function getUpdates(offset) {
   return tgPost('getUpdates', { offset, timeout: 20, allowed_updates: ['message'] });
 }
 
-// --- Claude ---
-function askClaude(userMsg, projectKey) {
+// --- Système prompt ---
+function buildSystemPrompt() {
   const vaultCtx = loadVaultBrief(VAULT_PATH);
   const projCtx = sessions.getProjectContext();
-  const history = ctx.getContext(projectKey);
-
   const activeProject = sessions.active
-    ? `\nProjet actif : ${sessions.active.name} (${sessions.active.path})`
-    : '\nMode : Master global (aucun projet actif)';
+    ? `Projet actif : ${sessions.active.name} (${sessions.active.path})`
+    : 'Mode : Master global (aucun projet actif)';
 
-  const parts = [
-    vaultCtx ? `[Vault Obsidian]\n${vaultCtx}` : '',
-    projCtx ? `[Contexte projet]\n${projCtx}` : '',
-    history ? `[Historique]\n${history}` : '',
-    `[Message Malik]${activeProject}\n${userMsg}`,
-    'Tu es le Master Claude Atelier — chef d\'orchestre de tous les projets de Malik. Réponds en français, max 3 phrases. Commence par "Master :"'
+  return [
+    'Tu es MasterClaude — assistant IA personnel de Malik, chef d\'orchestre de tous ses projets.',
+    'Tu réponds en français, de façon directe et concise.',
+    'Tu peux lancer des actions sur les projets si demandé (spawn claude session).',
+    activeProject,
+    vaultCtx ? `[Vault Obsidian — contexte global]\n${vaultCtx}` : '',
+    projCtx ? `[Contexte projet actif]\n${projCtx}` : '',
   ].filter(Boolean).join('\n\n');
+}
 
-  const r = spawnSync('claude', ['--print', '--output-format', 'text', '-p', parts], {
-    encoding: 'utf8',
-    timeout: 45000,
-    cwd: sessions.getCwd(ROOT)
+// --- Appel API Anthropic (conversation persistante) ---
+async function askClaude(userMsg, projectKey) {
+  const messages = ctx.getMessages(projectKey);
+  messages.push({ role: 'user', content: userMsg });
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1024,
+    system: buildSystemPrompt(),
+    messages,
   });
-  return r.stdout?.trim() || '';
+
+  return response.content[0]?.text?.trim() || '';
+}
+
+// --- Spawn session Claude sur un projet (non-bloquant) ---
+function spawnProjectSession(projectPath, prompt) {
+  return new Promise((resolve) => {
+    const proc = spawn('claude', ['--print', '--output-format', 'text', '-p', prompt], {
+      cwd: projectPath,
+      encoding: 'utf8',
+    });
+    let out = '';
+    proc.stdout.on('data', d => out += d);
+    proc.on('close', () => resolve(out.trim()));
+    proc.on('error', e => resolve(`❌ Erreur session : ${e.message}`));
+    setTimeout(() => { proc.kill(); resolve('⏱ Timeout session projet'); }, 60000);
+  });
 }
 
 // --- Commandes système ---
@@ -185,16 +209,29 @@ while (running) {
         continue;
       }
 
-      // Message → Claude
-      const projectKey = sessions.active?.name || 'global';
-      const reply = askClaude(text, projectKey);
+      // Commande projet direct : /run <prompt> → spawn claude sur projet actif
+      if (text.startsWith('/run ') && sessions.active) {
+        const prompt = text.slice(5).trim();
+        await send(`⚙️ Lancement sur ${sessions.active.name}…`);
+        const result = await spawnProjectSession(sessions.active.path, prompt);
+        await send(result || '✅ Terminé (pas de sortie)').catch(() => {});
+        continue;
+      }
 
-      if (reply) {
-        ctx.push(projectKey, text, reply);
-        await send(reply).catch(e =>
-          process.stderr.write(`[master] erreur send: ${e.message}\n`)
-        );
-        process.stdout.write('[master] répondu\n');
+      // Message → Claude (API persistante)
+      const projectKey = sessions.active?.name || 'global';
+      try {
+        const reply = await askClaude(text, projectKey);
+        if (reply) {
+          ctx.push(projectKey, text, reply);
+          await send(reply).catch(e =>
+            process.stderr.write(`[master] erreur send: ${e.message}\n`)
+          );
+          process.stdout.write('[master] répondu\n');
+        }
+      } catch (apiErr) {
+        process.stderr.write(`[master] erreur API: ${apiErr.message}\n`);
+        await send(`❌ Erreur : ${apiErr.message}`).catch(() => {});
       }
     }
   } catch (err) {
