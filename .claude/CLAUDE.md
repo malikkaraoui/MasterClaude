@@ -1,5 +1,4 @@
 # CLAUDE.md — Core Runtime
-
 > Cible ≤ 150 lignes · rechargé à chaque message · 2026-04-17 · détails hors core → `./rules/`, `./runtime/`, `./orchestration/`, `./autonomy/`, `./security/`, `./ecosystem/`, `../stacks/`, `../templates/`
 
 ## §0 Contexte projet actif
@@ -19,17 +18,13 @@
 | Gate pré-push | `bash scripts/pre-push-gate.sh` |
 
 Mise à jour : « Mets à jour §0 : [ce qui change] » → Claude édite + commit atomique.
-
 **⚠️ OBLIGATION** : Si `Phase`/`Stack` = `—` en début session → bloquer : « §0 vide = modèle/docs/stack incorrects. Projet / phase / stack ? » Pas de suite avant renseignement.
-
 **Logbook de clôture** : Fin de session significative → MAJ §0 automatique (`Phase`, `Stack`, `Next step`) sans attendre instruction. §0 persiste : prochaine session reprend là où on s'est arrêtés.
-
 ## §1 Horodatage + Modèle — EXIGENCE non négociable
 
 Extraire MODEL-ID de `[ROUTING] modèle actif: MODEL-ID` (jamais du system prompt). Source : `live > transcript > cache scoppé session > cache legacy` — si `transcript`, signaler fragilité.
 **Réponse DOIT commencer par** : `` `[YYYY-MM-DD HH:MM:SS | MODEL-ID] PASTILLE MODE` ``. Pastille de `[METRICS]` (`⬆️`/`⬇️`/`🟢`). Mode de `[SWITCH-MODE]` (`A`=auto, `M`=manuel, défaut `M`). Si `[PULSE]` présent → appendre `| 💓<niveau>·<n>/<total>` à l'entête.
-**Mode A** : flèche `⬆️`/`⬇️` → `python3 scripts/switch_model.py <model>` immédiat. **Mode M** : annoncer reco, attendre validation. Toggle : "passe en auto" → `echo A > /tmp/masterclaude-switch-mode`.
-Horodatage hook = contexte, **pas** ta sortie. Modèle indispo → `[date | modèle inconnu]`.
+**Mode A** : flèche `⬆️`/`⬇️` → `python3 scripts/switch_model.py <model>` immédiat. **Mode M** : annoncer reco, attendre validation. Toggle : "passe en auto" → `echo A > /tmp/masterclaude-switch-mode`. Horodatage hook = contexte, **pas** ta sortie. Modèle indispo → `[date | modèle inconnu]`.
 
 ## §2 Langue & Ton
 
@@ -38,9 +33,7 @@ Français. Direct. Actionnable. Zéro pédagogie inutile. Pas de preamble, hedge
 ## §3 Flow de traitement
 
 **Explore → Plan → Implement → Verify.** Mode rapide (< 2 fichiers, non critique) : Implement → Verify. `Shift+Tab × 2` = Plan Mode.
-
-- **Explore** : fichiers concernés uniquement (subagent Haiku si large) · **Plan** : impacts + dépendances avant d'écrire
-- **Implement** : minimal viable · Edit ciblé — jamais réécriture complète si > 20 lignes non modifiées · **Verify** : tests + gate
+- **Explore** : fichiers concernés uniquement (subagent Haiku si large) · **Plan** : impacts + dépendances avant d'écrire · **Implement** : minimal viable · Edit ciblé — jamais réécriture complète si > 20 lignes non modifiées · **Verify** : tests + gate
 
 ## §4 Format de réponse
 
@@ -49,8 +42,7 @@ Français. Direct. Actionnable. Zéro pédagogie inutile. Pas de preamble, hedge
 ## §5 Anti-hallucination — règle absolue
 
 Interdit d'inventer : faits, commandes, API, options, chiffres, comportements non vus.
-Si incertain → « Je ne peux pas l'affirmer » + 2–3 hypothèses étiquetées + comment vérifier.
-Info récente ou instable → signaler explicitement.
+Si incertain → « Je ne peux pas l'affirmer » + 2–3 hypothèses étiquetées + comment vérifier. Info récente/instable → signaler explicitement.
 
 ## §6 Gestion des erreurs
 
@@ -63,7 +55,6 @@ Prêt prod, pas sur-ingénié : validation d'inputs, erreurs propres, logs utile
 ## §8 Anti-patterns
 
 Refus : duplication, sur-ingénierie, optimisation prématurée, fonctions > 30 lignes sans raison, logique dispersée. Règle : logique réutilisée ≥ 2 fois → extraire.
-
 **Vault-first — non négociable** : toute question sur l'état du projet (fonctionnalité active ? livré ? testé ?) → lire `vault/30-discoveries.md` avant de répondre. Répondre sans lire = interdit, même si la réponse semble évidente.
 
 ## §9 Architecture → `../templates/project-structure.md`
@@ -73,7 +64,6 @@ Template par défaut : `/core` · `/modules` · `/services` · `/utils` · `/tes
 ## §10 Standards par stack → `../stacks/`
 
 Chargement conditionnel selon §0 « Stack ». Disponibles : `javascript` · `python` · `java` · `c` · `cpp` · `csharp` · `rust` · `go` · `php` · `perl` · `sql` · `r` · `fortran` · `matlab` · `ada` · `assembly` · `delphi` · `scratch` · `visual-basic` · `react-vite` · `firebase` · `docker` · `ollama` · `ios-xcode` · `freebox` · `npm-publish`.
-
 **Context7** → `./ecosystem/context7-mapping.md` : croiser §0 (Phase + Stack) à chaque session pour calibrer les docs. Si §0 vide → signaler avant tout appel context7.
 
 ## §11 Tests
@@ -150,12 +140,10 @@ Plan Pro → `acceptEdits` + allow/deny, `maxBudgetUsd` défini. Push autonome a
 ## §25 Inter-agents — Review Copilot auto
 
 **Générer le handoff automatiquement, sans demander**, dès que : feature terminée, bug fix critique, 100+ lignes modifiées, PR créée (même docs only), ou avant tout commit/push/bump. **Séquence intégrale obligatoire** :
-
 1. `/review-copilot` → handoff JSON dans `docs/handoffs/`
 2. commit handoff + push
 3. PR créée en **draft**
 4. **PR draft → ready_for_review** (sinon Copilot ne review pas)
 5. `/copilot-loop` (ou équivalent webhook) lancé immédiatement
 6. `subscribe_pr_activity` actif → webhook GitHub = réveil persistant (pas de polling manuel, pas de question utilisateur)
-
-Ne jamais demander confirmation entre deux étapes. Ne jamais attendre instruction utilisateur pour passer la PR en ready ou activer le loop. Le réveil et l'intégration des fixes Copilot suivent automatiquement via la subscription webhook. **Réflexe non négociable, pas un choix.**
+Pas de confirmation entre étapes. PR → ready + loop automatiques via webhook. **Réflexe non négociable.**
