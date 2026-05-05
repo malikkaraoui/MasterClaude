@@ -6,13 +6,15 @@
 
 | Clé | Valeur |
 | --- | --- |
-| Projet courant | claude-atelier (framework Claude Code) |
-| Phase | Phase 2 — v0.26.0 · package npm nettoyé (master/telegram exclus) · next: fork MasterClaude + npm publish claude-atelier |
-| Stack | Node.js (hooks/scripts) + Go (ollama-proxy) |
-| Repo | claude-atelier/Claude-instructions |
+| Projet courant | MasterClaude (runtime Claude Code autonome — usage personnel) |
+| Phase | v0.1.0 — fork initial depuis claude-atelier v0.26.0 · next: LaunchAgent daemon opérationnel + routing Telegram multi-projets |
+| Stack | Node.js (daemon/hooks/scripts) + Go (ollama-proxy) + Python (Telegram bridge) |
+| Repo | malikkaraoui/MasterClaude |
+| Path local | /Users/malik/MasterClaude |
+| Vault Obsidian | /Users/malik/Vault/Malik/ (contexte global Malik, lu par le daemon) |
 | Conventions | FR commits, pas de signing, gate pré-push |
-| Endpoints actifs | proxy :4000 (Ollama), Ollama :11434 |
-| Contraintes métier | LLM local via Ollama, tool_use bidirectionnel |
+| Endpoints actifs | proxy :4000 (Ollama), Ollama :11434, Telegram bot (TELEGRAM_BOT_TOKEN) |
+| Contraintes métier | LLM local via Ollama, tool_use bidirectionnel, LaunchAgent macOS KeepAlive |
 | MCPs actifs | qmd (moteur recherche .md hybride), github (PR reviews, polling), obsidian-vault (vault /Users/malik/Vault/Malik/) |
 | Gate pré-push | `bash scripts/pre-push-gate.sh` |
 
@@ -26,7 +28,7 @@ Mise à jour : « Mets à jour §0 : [ce qui change] » → Claude édite + comm
 
 Extraire MODEL-ID de `[ROUTING] modèle actif: MODEL-ID` (jamais du system prompt). Source : `live > transcript > cache scoppé session > cache legacy` — si `transcript`, signaler fragilité.
 **Réponse DOIT commencer par** : `` `[YYYY-MM-DD HH:MM:SS | MODEL-ID] PASTILLE MODE` ``. Pastille de `[METRICS]` (`⬆️`/`⬇️`/`🟢`). Mode de `[SWITCH-MODE]` (`A`=auto, `M`=manuel, défaut `M`). Si `[PULSE]` présent → appendre `| 💓<niveau>·<n>/<total>` à l'entête.
-**Mode A** : flèche `⬆️`/`⬇️` → `python3 scripts/switch_model.py <model>` immédiat. **Mode M** : annoncer reco, attendre validation. Toggle : "passe en auto" → `echo A > /tmp/claude-atelier-switch-mode`.
+**Mode A** : flèche `⬆️`/`⬇️` → `python3 scripts/switch_model.py <model>` immédiat. **Mode M** : annoncer reco, attendre validation. Toggle : "passe en auto" → `echo A > /tmp/masterclaude-switch-mode`.
 Horodatage hook = contexte, **pas** ta sortie. Modèle indispo → `[date | modèle inconnu]`.
 
 ## §2 Langue & Ton
