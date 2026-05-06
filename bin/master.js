@@ -15,9 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir } from 'node:fs';
 import { loadVaultBrief } from '../src/master/vault-loader.js';
 
-// Transcription daemon
+// Transcription daemon (TRANSCRIBE_SCRIPT défini après __dirname, ligne ~27)
 const TRANSCRIBE_SOCK = '/tmp/tg-transcribe.sock';
-const TRANSCRIBE_SCRIPT = join(resolve(__dirname, '..'), 'scripts', 'transcribe-daemon.py');
 
 function ensureTranscribeDaemon() {
   if (_exists(TRANSCRIBE_SOCK)) return;
@@ -82,6 +81,7 @@ import { MemoryStore } from '../src/master/memory-store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
+const TRANSCRIBE_SCRIPT = join(ROOT, 'scripts', 'transcribe-daemon.py');
 
 // --- Lockfile : une seule instance ---
 const LOCKFILE = '/tmp/masterclaude-master.lock';
