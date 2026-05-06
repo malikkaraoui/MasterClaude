@@ -248,6 +248,35 @@ def reload_vault_context() -> str:
 
 
 # ============================================================================
+# Mémoire RAG — Ollama nomic-embed-text
+# ============================================================================
+
+MEMORY_READ_SCRIPT = Path(__file__).parent.parent / "scripts" / "memory-read.js"
+MEMORY_TIMEOUT_S = _parse_int_env("MEMORY_TIMEOUT_S", 5)
+
+
+async def fetch_memory_context(query: str) -> str:
+    """Appelle memory-read.js et retourne le contexte mémoire formaté, ou '' si indispo."""
+    if not MEMORY_READ_SCRIPT.exists():
+        return ""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "node", str(MEMORY_READ_SCRIPT), query,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=MEMORY_TIMEOUT_S)
+        result = stdout.decode().strip()
+        if result and "MINIMAL" not in result:
+            logger.info(f"[MEMORY] {len(result)} chars injectés pour query: {query[:60]!r}")
+            return result
+        logger.info("[MEMORY] Mode MINIMAL ou résultat vide — skip injection")
+    except Exception as e:
+        logger.info(f"[MEMORY] indisponible ({e}) — skip injection")
+    return ""
+
+
+# ============================================================================
 # Claude / Ollama Runner
 # ============================================================================
 
@@ -293,24 +322,29 @@ class ClaudeRunner:
             logger.error(f"Ollama chat error: {e}")
             return f"Erreur Ollama: {e}", 0.0
 
-    def _build_claude_args(self) -> list[str]:
+    def _build_claude_args(self, memory_ctx: str = "") -> list[str]:
         """Construit les arguments CLI sans concaténation shell."""
         args = ["claude", "--output-format", "text"]
+        parts = [
+            "Tu es MasterClaude, assistant IA personnel de Malik. "
+            "Réponds en français, direct et actionnable. "
+            "Tu connais tous ses projets via le vault ci-dessous."
+        ]
         if _VAULT_MALIK_CONTEXT:
-            prefix = (
-                "Tu es MasterClaude, assistant IA personnel de Malik. "
-                "Réponds en français, direct et actionnable. "
-                "Tu connais tous ses projets via le vault ci-dessous.\n\n"
-            )
-            args += ["--append-system-prompt", prefix + _VAULT_MALIK_CONTEXT[:4000]]
+            parts.append("\n[Vault Obsidian]\n" + _VAULT_MALIK_CONTEXT[:4000])
+        if memory_ctx:
+            parts.append("\n[Mémoire pertinente]\n" + memory_ctx[:2000])
+        args += ["--append-system-prompt", "\n".join(parts)]
         return args
 
     async def _run_claude_cli(self, user_message: str) -> Tuple[str, float]:
         """Run claude CLI via stdin pipe. No shell — no injection risk."""
         estimated_cost = 0.01  # placeholder; real cost requires --output-format json parsing
 
+        memory_ctx = await fetch_memory_context(user_message)
+
         proc = await asyncio.create_subprocess_exec(
-            *self._build_claude_args(),
+            *self._build_claude_args(memory_ctx),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

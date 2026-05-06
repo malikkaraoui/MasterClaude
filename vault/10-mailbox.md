@@ -205,3 +205,59 @@ Claude : Le bridge Telegram reçoit bien tes messages (je lis celui-ci en temps 
 - Source : claude-code
 - Statut : envoyé
 - Résumé : Test de diagnostic Claude
+
+### 2026-05-05 10:38 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : tu es une nouvelle session ? une nouvelle session mais tu as accès à la mémoire entre session ?
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-05 10:48 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : super. donc on lance les travaux pour que ollama se joingne à la fete ?
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-05 10:49 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : on doit définir ce que ollama a en charge pour commencer.
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-05 10:55 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : Recommandation pour démarrer : juste le RAG embed (nomic-embed-text → inject mémoire dans le prompt Claude). C'est le gain immédiat, zéro latence ajoutée visible, et ça complète le travail déjà fait sur memory-lib.js.
+
+OK , c'est partie
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-05 10:57 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : test pour regarder si dans le logs [MEMORY] apparait avant le spawn claude
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-05 11:11 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : test pour regarder si dans le logs [MEMORY] apparait avant le spawn claude ??????
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
