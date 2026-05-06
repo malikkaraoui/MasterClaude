@@ -124,6 +124,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash \"hooks/guard-monitor-bridge.sh\""
+          },
+          {
+            "type": "command",
             "command": "bash \"hooks/routing-check.sh\""
           },
           {
