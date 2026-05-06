@@ -101,19 +101,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"hooks/session-model.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/session-model.sh\""
           },
           {
             "type": "command",
-            "command": "bash \"hooks/vault-context.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/vault-context.sh\""
           },
           {
             "type": "command",
-            "command": "bash \"hooks/session-ipc-bridge.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/session-ipc-bridge.sh\""
           },
           {
             "type": "command",
-            "command": "bash \"hooks/session-handoff-restore.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/session-handoff-restore.sh\""
           }
         ]
       }
@@ -124,19 +124,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"hooks/guard-monitor-bridge.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-monitor-bridge.sh\""
           },
           {
             "type": "command",
-            "command": "bash \"hooks/routing-check.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/routing-check.sh\""
           },
           {
             "type": "command",
-            "command": "bash \"hooks/model-metrics.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/model-metrics.sh\""
           },
           {
             "type": "command",
-            "command": "bash \"hooks/detect-design-need.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/detect-design-need.sh\""
           },
           {
             "type": "command",
@@ -151,7 +151,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"hooks/guard-qmd-first.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-qmd-first.sh\""
           }
         ]
       },
@@ -160,17 +160,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"hooks/guard-no-sign.sh\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-no-sign.sh\"",
             "if": "Bash(*git commit*)"
           },
           {
             "type": "command",
-            "command": "bash \"hooks/guard-commit-french.sh\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-commit-french.sh\"",
             "if": "Bash(*git commit*)"
           },
           {
             "type": "command",
-            "command": "bash \"hooks/guard-tests-before-push.sh\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-tests-before-push.sh\"",
             "if": "Bash(*git push*)"
           }
         ]
@@ -182,7 +182,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"hooks/guard-header-check.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-header-check.sh\""
           }
         ]
       }
@@ -193,7 +193,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"hooks/guard-hooks-reload.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-hooks-reload.sh\""
           }
         ]
       },
@@ -202,41 +202,41 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"hooks/guard-review-auto.sh\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-review-auto.sh\"",
             "if": "Bash(*git commit*)"
           },
           {
             "type": "command",
-            "command": "bash \"hooks/telegram-notify.sh\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/telegram-notify.sh\"",
             "if": "Bash(*git commit*)"
           },
           {
             "type": "command",
-            "command": "bash \"hooks/telegram-notify.sh\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/telegram-notify.sh\"",
             "if": "Bash(*git push*)"
           },
           {
             "type": "command",
-            "command": "bash \"hooks/guard-anti-loop.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-anti-loop.sh\""
           },
           {
             "type": "command",
-            "command": "bash \"hooks/guard-tests-before-push.sh\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-tests-before-push.sh\"",
             "if": "Bash(*npm test*)"
           },
           {
             "type": "command",
-            "command": "bash \"hooks/guard-tests-before-push.sh\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-tests-before-push.sh\"",
             "if": "Bash(*jest*)"
           },
           {
             "type": "command",
-            "command": "bash \"hooks/guard-tests-before-push.sh\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-tests-before-push.sh\"",
             "if": "Bash(*vitest*)"
           },
           {
             "type": "command",
-            "command": "bash \"hooks/guard-tests-before-push.sh\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-tests-before-push.sh\"",
             "if": "Bash(*pytest*)"
           }
         ]
