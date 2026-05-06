@@ -57,6 +57,11 @@ Desktop.ini
 coverage/
 .nyc_output/
 
+# Python bytecode (compilé localement par pytest, jamais versionné)
+__pycache__/
+*.pyc
+.pytest_cache/
+
 # Documents de travail personnels (non versionnés)
 ios_vscode_claude_workflow_v4.md
 BUILD_FFI_TROUBLESHOOTING.md
