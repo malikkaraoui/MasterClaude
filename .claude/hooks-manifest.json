@@ -388,15 +388,56 @@
         "0": "always (notification only, never blocks)"
       },
       "sha256": "a37841fc11af05b7"
+    },
+    {
+      "name": "guard-monitor-bridge",
+      "file": "hooks/guard-monitor-bridge.sh",
+      "type": "UserPromptSubmit",
+      "trigger": "every user prompt",
+      "purpose": "Self-healing du bridge Telegram — vérifie qu'un Monitor (tail -f /tmp/tg-inbox.jsonl) tourne. S'il a été tué (ex : par /compact), injecte une consigne bloquante via additionalContext qui force Claude à relancer Monitor avant toute autre réponse.",
+      "inputs": [
+        "pgrep tail -f .* /tmp/tg-inbox.jsonl"
+      ],
+      "outputs": [
+        "exit 0 silencieux si Monitor up",
+        "exit 0 + additionalContext bloquant si Monitor absent"
+      ],
+      "rule": "fix(bridge): self-healing Monitor post-/compact",
+      "test": null,
+      "exitCodes": {
+        "0": "always (jamais bloquant — guidance only)"
+      },
+      "sha256": "8220bb51b9889387"
+    },
+    {
+      "name": "session-handoff-restore",
+      "file": "hooks/session-handoff-restore.sh",
+      "type": "SessionStart",
+      "trigger": "session boot après migration via /migrate ou burn 60%",
+      "purpose": "Migration bipartite — détecte /tmp/masterclaude-handoff-${PROJECT_KEY}.json laissé par la session précédente, l'injecte dans additionalContext (avec consigne d'exécuter next_action), ping Telegram \"✨ Frais, douché, opérationnel\", archive le handoff dans vault/handoffs/.",
+      "inputs": [
+        "/tmp/masterclaude-handoff-${PROJECT_KEY}.json (handoff JSON laissé par le prédécesseur)"
+      ],
+      "outputs": [
+        "additionalContext avec le JSON brut + consigne",
+        "Telegram ping (si TELEGRAM_BOT_TOKEN/CHAT_ID définis)",
+        "archive vault/handoffs/${ts}-${PROJECT_KEY}-restored.json"
+      ],
+      "rule": "feat(migration): migration bipartite via skill /migrate-now",
+      "test": null,
+      "exitCodes": {
+        "0": "always (no-op si pas de handoff live)"
+      },
+      "sha256": "d8d26dba8ed26cee"
     }
   ],
   "stats": {
-    "total": 19,
+    "total": 21,
     "byType": {
       "helper": 1,
-      "SessionStart": 4,
+      "SessionStart": 5,
       "Stop": 2,
-      "UserPromptSubmit": 3,
+      "UserPromptSubmit": 4,
       "PreToolUse": 3,
       "PostToolUse": 4,
       "PreToolUse + PostToolUse": 1
