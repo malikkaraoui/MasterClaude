@@ -160,7 +160,10 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 
 // validProjectKey accepte uniquement a-zA-Z0-9_- (max 64 chars, pas de préfixe . ou -).
 func validProjectKey(key string) bool {
-	if key == "" || len(key) > 64 {
+	if len(key) == 0 || len(key) > 64 {
+		return false
+	}
+	if key[0] == '.' || key[0] == '-' {
 		return false
 	}
 	for _, r := range key {
@@ -172,5 +175,5 @@ func validProjectKey(key string) bool {
 			return false
 		}
 	}
-	return key[0] != '.' && key[0] != '-'
+	return true
 }
