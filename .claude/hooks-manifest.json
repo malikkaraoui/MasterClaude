@@ -188,7 +188,7 @@
       "exitCodes": {
         "0": "always (warning only, never blocks)"
       },
-      "sha256": "65546a5366f77daf"
+      "sha256": "8c04c10a41896369"
     },
     {
       "name": "guard-tests-before-push",

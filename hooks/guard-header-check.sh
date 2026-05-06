@@ -69,8 +69,8 @@ first_line = last_text.split('\n')[0].strip()
 HEADER_RE = r'`?\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \| ([^\]]+)\]'
 m = re.search(HEADER_RE, first_line)
 if not m:
-    print(f"[GUARD-HEADER] ⚠️  Entête §1 ABSENT ou malformé")
-    print(f"  1ère ligne reçue: {first_line[:100]!r}")
+    print(f"[GUARD-HEADER] ⚠️  Entête §1 ABSENT ou malformé", file=sys.stderr)
+    print(f"  1ère ligne reçue: {first_line[:100]!r}", file=sys.stderr)
     sys.exit(0)
 
 issues = []
@@ -94,14 +94,14 @@ if last_input_tokens > 0:
             issues.append(f"icône incohérente: {reported}% devrait être {expected_icon}")
 
 if issues:
-    print(f"[GUARD-HEADER] ⚠️  {' | '.join(issues)}")
+    print(f"[GUARD-HEADER] ⚠️  {' | '.join(issues)}", file=sys.stderr)
 PYEOF
 
 # Nettoyer le signal file IPC — invalide la session pour master.js
 SIGNAL_FILE="/tmp/masterclaude-real-claude-active"
 if [ -f "$SIGNAL_FILE" ]; then
   rm -f "$SIGNAL_FILE"
-  echo "[GUARD-HEADER] Signal file IPC supprimé — session fermée"
+  echo "[GUARD-HEADER] Signal file IPC supprimé — session fermée" >&2
 fi
 
 exit 0
