@@ -13,6 +13,12 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir } from 'node:fs';
 import { loadVaultBrief } from '../src/master/vault-loader.js';
+
+// IPC bridge — THIS session répond directement (fichier signaux)
+const INBOX_FILE = '/tmp/tg-inbox.jsonl';
+const RESPONSE_DIR = '/tmp/tg-responses';
+const REAL_CLAUDE_ACTIVE_FILE = '/tmp/masterclaude-real-claude-active';
+_mkdir(RESPONSE_DIR, { recursive: true });
 import { SessionManager } from '../src/master/session-manager.js';
 import { MemoryStore } from '../src/master/memory-store.js';
 
@@ -156,6 +162,73 @@ function handleGitCommand(text) {
   return null;
 }
 
+// --- GitHub Poller — notifications push/PR/commit vers Telegram ---
+const GH_EVENT_FILE = '/tmp/masterclaude-gh-last-event';
+let ghLastEventId = '';
+try { ghLastEventId = _rfs(GH_EVENT_FILE, 'utf8').trim(); } catch {}
+
+const GH_EVENT_ICONS = {
+  PushEvent: '📦',
+  PullRequestEvent: '🔀',
+  CreateEvent: '🌿',
+  IssuesEvent: '🐛',
+  IssueCommentEvent: '💬',
+  ReleaseEvent: '🚀',
+};
+
+async function pollGitHub() {
+  try {
+    const r = spawnSync('gh', ['api', '/users/malikkaraoui/events', '--paginate', '--jq', '.[0:30]'], {
+      encoding: 'utf8', timeout: 15000
+    });
+    if (r.status !== 0 || !r.stdout) return;
+    const events = JSON.parse(r.stdout);
+    if (!Array.isArray(events) || events.length === 0) return;
+
+    // Trouver les nouveaux events depuis le dernier ID connu
+    const newEvents = ghLastEventId
+      ? events.filter(e => BigInt(e.id) > BigInt(ghLastEventId))
+      : [];
+
+    // Sauvegarder le dernier ID (toujours, même au premier démarrage)
+    const latestId = events[0]?.id;
+    if (latestId && latestId !== ghLastEventId) {
+      ghLastEventId = latestId;
+      try { _wfs(GH_EVENT_FILE, `${latestId}\n`); } catch {}
+    }
+
+    // Pas de premier démarrage (pas de nouveaux events à notifier)
+    if (!newEvents.length) return;
+
+    // Envoyer les nouvelles notifs (plus récent en dernier = ordre chronologique)
+    for (const ev of newEvents.reverse()) {
+      const icon = GH_EVENT_ICONS[ev.type] || '📋';
+      const repo = ev.repo?.name || '?';
+      let detail = '';
+
+      if (ev.type === 'PushEvent') {
+        const commits = ev.payload?.commits || [];
+        const branch = ev.payload?.ref?.replace('refs/heads/', '') || '';
+        const msgs = commits.slice(0, 3).map(c => `  • ${c.message.split('\n')[0].slice(0, 60)}`).join('\n');
+        detail = `push → ${branch} (${commits.length} commit${commits.length > 1 ? 's' : ''})\n${msgs}`;
+      } else if (ev.type === 'PullRequestEvent') {
+        const pr = ev.payload?.pull_request;
+        detail = `PR #${pr?.number} [${ev.payload?.action}] ${pr?.title?.slice(0, 80)}`;
+      } else if (ev.type === 'CreateEvent') {
+        detail = `${ev.payload?.ref_type} ${ev.payload?.ref} créé`;
+      } else if (ev.type === 'IssuesEvent') {
+        detail = `Issue #${ev.payload?.issue?.number} [${ev.payload?.action}] ${ev.payload?.issue?.title?.slice(0, 60)}`;
+      } else {
+        detail = ev.type;
+      }
+
+      await send(`${icon} GitHub — ${repo}\n${detail}`).catch(() => {});
+    }
+  } catch (e) {
+    process.stderr.write(`[gh-poll] erreur: ${e.message}\n`);
+  }
+}
+
 // --- Appel claude CLI — RAG memory (top-K échanges pertinents) + --continue ---
 async function askClaude(userMsg, projectKey) {
   const sessionDir = getSessionDir(projectKey);
@@ -192,6 +265,53 @@ async function askClaude(userMsg, projectKey) {
     proc.stdout.on('data', d => out += d);
     proc.on('close', () => { cleanup(); resolve(out.trim()); });
     proc.on('error', e => { cleanup(); resolve(`❌ Erreur CLI : ${e.message}`); });
+  });
+}
+
+// --- IPC bridge — route vers THIS session si active, fallback subprocess sinon ---
+async function askRealClaude(userMsg, projectKey) {
+  // Si THIS session n'est pas en écoute → fallback subprocess classique
+  if (!_exists(REAL_CLAUDE_ACTIVE_FILE)) {
+    return askClaude(userMsg, projectKey);
+  }
+
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const responseFile = join(RESPONSE_DIR, `${id}.txt`);
+  const entry = JSON.stringify({ id, ts: Date.now(), user: userMsg, project: projectKey });
+
+  try {
+    _wfs(INBOX_FILE, entry + '\n', { flag: 'a' });
+  } catch (e) {
+    process.stderr.write(`[ipc] erreur write inbox: ${e.message}\n`);
+    return askClaude(userMsg, projectKey);
+  }
+
+  process.stdout.write(`[ipc] msg→THIS session (id=${id})\n`);
+
+  const ackTimer = setTimeout(async () => {
+    await send('⚙️ Je traite…').catch(() => {});
+  }, 8000);
+  let heartbeatCount = 0;
+  const heartbeat = setInterval(async () => {
+    heartbeatCount++;
+    await send(`⏳ Toujours en cours… (${heartbeatCount * 60}s)`).catch(() => {});
+  }, 60000);
+
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const poll = setInterval(() => {
+      if (_exists(responseFile)) {
+        clearTimeout(ackTimer); clearInterval(heartbeat); clearInterval(poll);
+        const response = _rfs(responseFile, 'utf8').trim();
+        try { _unlink(responseFile); } catch {}
+        resolve(response || '(vide)');
+      } else if (Date.now() - start > 300000) {
+        // 5min sans réponse → fallback subprocess
+        clearTimeout(ackTimer); clearInterval(heartbeat); clearInterval(poll);
+        process.stdout.write(`[ipc] timeout 5min — fallback subprocess (id=${id})\n`);
+        askClaude(userMsg, projectKey).then(resolve);
+      }
+    }, 500);
   });
 }
 
@@ -279,6 +399,12 @@ await send('🟢 Master Claude Atelier en ligne\nTape /help pour les commandes.'
   process.stderr.write(`[master] warn: ${e.message}\n`);
 });
 
+// GitHub poller — toutes les 2 minutes (premier tick après 5s pour laisser le daemon démarrer)
+setTimeout(async () => {
+  await pollGitHub();
+  setInterval(pollGitHub, 120000);
+}, 5000);
+
 while (running) {
   try {
     const data = await getUpdates(offset);
@@ -338,7 +464,7 @@ while (running) {
       // Message → Claude (session persistante via --continue)
       const projectKey = sessions.active?.name || 'global';
       try {
-        const reply = await askClaude(text, projectKey);
+        const reply = await askRealClaude(text, projectKey);
         if (reply) {
           await send(reply).catch(e =>
             process.stderr.write(`[master] erreur send: ${e.message}\n`)
