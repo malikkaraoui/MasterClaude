@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.masterclaude.parachute</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__BIN__</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PARACHUTE_ADDR</key>
+    <string>127.0.0.1:4001</string>
+    <key>PARACHUTE_DATA</key>
+    <string>__DATA__</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+
+  <key>StandardOutPath</key>
+  <string>__LOG__</string>
+
+  <key>StandardErrorPath</key>
+  <string>__LOG__</string>
+
+  <key>WorkingDirectory</key>
+  <string>__ROOT__</string>
+</dict>
+</plist>

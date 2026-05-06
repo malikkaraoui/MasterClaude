@@ -15,6 +15,13 @@ build/
 
 # Go binaries
 scripts/ollama-proxy/ollama-proxy
+parachute/bin/parachute
+parachute/data/
+
+# Sessions runtime + backups CLAUDE.md
+sessions/
+.claude/CLAUDE.md.bak
+*.bak
 
 # Env / Secrets (parano par défaut — voir src/fr/security/)
 .env
