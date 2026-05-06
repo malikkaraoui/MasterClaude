@@ -352,16 +352,53 @@ function findExistingClaudeSession() {
 }
 
 // --- Réveil session : ouvre Terminal.app et lance `claude` dans MasterClaude ---
+// Mutex via lock file : empêche les wakes concurrents (ex: 5 messages Telegram → 5 fenêtres).
+// TTL 35s = couvre la fenêtre de polling 30s + marge. Lock orphelin ignoré.
+const WAKE_LOCK_FILE = '/tmp/masterclaude-wake.lock';
+const WAKE_LOCK_TTL_MS = 35000;
+
+function readWakeLock() {
+  if (!_exists(WAKE_LOCK_FILE)) return null;
+  try {
+    const ts = parseInt(_rfs(WAKE_LOCK_FILE, 'utf8').trim(), 10);
+    if (!Number.isFinite(ts)) return null;
+    if (Date.now() - ts > WAKE_LOCK_TTL_MS) {
+      try { _unlink(WAKE_LOCK_FILE); } catch {}
+      return null;
+    }
+    return ts;
+  } catch { return null; }
+}
+
 async function wakeClaudeSession() {
+  // Mutex : si un wake est déjà en cours, attendre le signal au lieu de re-spawn
+  const existingLock = readWakeLock();
+  if (existingLock) {
+    process.stdout.write(`[wake] wake déjà en cours (lock=${existingLock}) — attente du signal\n`);
+    for (let i = 0; i < 70; i++) {
+      const sig = readSessionSignal();
+      if (sig.valid) {
+        process.stdout.write(`[wake] piggyback OK PID=${sig.claudePid}\n`);
+        return true;
+      }
+      if (!_exists(WAKE_LOCK_FILE)) break; // wake initial a fini sans succès
+      await new Promise(r => setTimeout(r, 500));
+    }
+    return readSessionSignal().valid;
+  }
+  try { _wfs(WAKE_LOCK_FILE, `${Date.now()}\n`); } catch {}
+
   await send('🚀 Réveil d\'une nouvelle session Claude…').catch(() => {});
-  // osascript : active Terminal puis exécute la commande dans une nouvelle fenêtre
-  const cmd = `cd ${ROOT} && claude`;
+  // osascript : active Terminal puis exécute la commande dans une nouvelle fenêtre.
+  // Path entre quotes simples côté shell pour résister aux espaces/specials.
+  const cmd = `cd '${ROOT.replace(/'/g, `'\\''`)}' && claude`;
   const script = `tell application "Terminal"
   activate
-  do script "${cmd}"
+  do script "${cmd.replace(/"/g, '\\"')}"
 end tell`;
   const r = spawnSync('osascript', ['-e', script], { encoding: 'utf8', timeout: 10000 });
   if (r.status !== 0) {
+    try { _unlink(WAKE_LOCK_FILE); } catch {}
     process.stderr.write(`[wake] osascript échec (status=${r.status}): ${r.stderr}\n`);
     await send('❌ Réveil échoué — autorise Terminal.app dans Réglages → Confidentialité → Automation, puis réessaie.').catch(() => {});
     return false;
@@ -372,10 +409,12 @@ end tell`;
     const sig = readSessionSignal();
     if (sig.valid) {
       process.stdout.write(`[wake] session active PID=${sig.claudePid}\n`);
+      try { _unlink(WAKE_LOCK_FILE); } catch {}
       return true;
     }
     await new Promise(r => setTimeout(r, 500));
   }
+  try { _unlink(WAKE_LOCK_FILE); } catch {}
   process.stderr.write('[wake] timeout 30s — pas de signal file détecté\n');
   await send('⚠️ Session Claude semble lancée mais le signal IPC n\'est pas arrivé. Vérifie le terminal.').catch(() => {});
   return false;
