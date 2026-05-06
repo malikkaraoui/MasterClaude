@@ -294,74 +294,153 @@ async function pollGitHub() {
   }
 }
 
-// --- Appel claude CLI — subprocess dans /tmp pour éviter les hooks MasterClaude ---
-async function askClaude(userMsg, projectKey) {
-  // Système minimal : pas de vault, pas de hooks destructifs (cwd=/tmp)
-  const systemShort = [
-    'Tu es MasterClaude — assistant IA personnel de Malik.',
-    'Tu réponds en français, de façon directe et concise.',
-    'Malik t\'écrit via Telegram (chat). Ne lui demande jamais de lancer une commande — fais-le toi-même si nécessaire.',
-  ].join('\n');
-  const relevant = await memory.retrieve(projectKey, userMsg);
-  if (relevant) {
-    process.stdout.write(`[memory] ${relevant.length} chars injectés (key=${projectKey})\n`);
-  }
-  const prompt = relevant
-    ? `${systemShort}\n\n[Contexte]\n${relevant}\n\n${userMsg}`
-    : `${systemShort}\n\n${userMsg}`;
-  const args = ['--print', '--output-format', 'text', '--dangerously-skip-permissions', '-p', prompt];
-  const childEnv = { ...process.env };
-  delete childEnv.ANTHROPIC_API_KEY; // Claude Code utilise OAuth Max plan, pas la clé API
+// --- Helpers : ctx%, PID alive, kill propre ---
+const CTX_PCT_FILE = '/tmp/masterclaude-ctx-pct';
+const CTX_RESTART_THRESHOLD = 60; // % au-delà duquel on relance la session
 
-  // Ack immédiat si la réponse tarde (> 8s)
-  let ackSent = false;
-  const ackTimer = setTimeout(async () => {
-    ackSent = true;
-    await send('⚙️ Je traite, ça prend un moment…').catch(() => {});
-  }, 8000);
-
-  // Heartbeat toutes les 60s — sans limite de durée
-  let heartbeatCount = 0;
-  const heartbeat = setInterval(async () => {
-    heartbeatCount++;
-    await send(`⏳ Toujours en cours… (${heartbeatCount * 60}s)`).catch(() => {});
-  }, 60000);
-
-  return new Promise((resolve) => {
-    const proc = spawn('claude', args, { cwd: '/tmp', encoding: 'utf8', env: childEnv });
-    let out = '';
-    const cleanup = () => { clearTimeout(ackTimer); clearInterval(heartbeat); clearTimeout(hardKill); };
-    // Timeout hard 90s — tue le subprocess et répond avec erreur
-    const hardKill = setTimeout(() => {
-      proc.kill('SIGTERM');
-      cleanup();
-      process.stdout.write('[askClaude] timeout 90s — subprocess tué\n');
-      resolve('⏱ Délai dépassé (90s). Réessaie ou envoie `/run` pour une tâche longue.');
-    }, 90000);
-    proc.stdout.on('data', d => out += d);
-    proc.on('close', () => { cleanup(); resolve(out.trim() || '(vide)'); });
-    proc.on('error', e => { cleanup(); resolve(`❌ Erreur CLI : ${e.message}`); });
-  });
+function getCtxPct() {
+  try {
+    const v = _rfs(CTX_PCT_FILE, 'utf8').trim();
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : 0;
+  } catch { return 0; }
 }
 
-// --- IPC bridge — route vers THIS session si active, fallback subprocess sinon ---
-async function askRealClaude(userMsg, projectKey) {
-  if (!_exists(REAL_CLAUDE_ACTIVE_FILE)) {
-    return askClaude(userMsg, projectKey);
-  }
-  // Valider TTL : signal file = "timestamp:PID" → périmé si > 2h
+function isPidAlive(pid) {
+  if (!pid || !Number.isFinite(pid)) return false;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+// Lit signal file → { valid, claudePid, ageS } (claudePid = parent_pid = process Claude Code)
+function readSessionSignal() {
+  if (!_exists(REAL_CLAUDE_ACTIVE_FILE)) return { valid: false };
   try {
     const sig = _rfs(REAL_CLAUDE_ACTIVE_FILE, 'utf8').trim();
-    const ts = parseInt(sig.split(':')[0], 10);
-    if (!ts || (Date.now() / 1000 - ts) > 600) {
-      process.stdout.write(`[ipc] signal périmé (${Math.round(Date.now() / 1000 - ts)}s > 600s) — fallback\n`);
-      return askClaude(userMsg, projectKey);
+    const parts = sig.split(':');
+    const ts = parseInt(parts[0], 10);
+    // Format v1: "ts:shellPID" — Format v2: "ts:shellPID:parentPID"
+    const claudePid = parseInt(parts[2] || parts[1], 10);
+    if (!ts) return { valid: false };
+    const ageS = Math.round(Date.now() / 1000 - ts);
+    if (ageS > 600) return { valid: false, ageS, claudePid };
+    if (!isPidAlive(claudePid)) {
+      process.stdout.write(`[ipc] signal vivant mais PID=${claudePid} mort — invalidation\n`);
+      return { valid: false, ageS, claudePid };
     }
+    return { valid: true, ageS, claudePid };
   } catch {
-    process.stdout.write('[ipc] signal illisible — fallback\n');
-    return askClaude(userMsg, projectKey);
+    return { valid: false };
+  }
+}
+
+// Détecte une session claude CLI Terminal interactive.
+// Discriminant : la commande complète vaut exactement "claude" (sans path ni args).
+// Exclut VS Code (binaire .vscode/extensions/.../native-binary/claude --output-format stream-json...)
+// et Claude.app (chemin /Applications/Claude.app/...).
+function findExistingClaudeSession() {
+  const r = spawnSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' });
+  const pids = (r.stdout || '').split('\n')
+    .map(line => {
+      const m = line.match(/^\s*(\d+)\s+(.+)$/);
+      if (!m) return null;
+      const pid = parseInt(m[1], 10);
+      const cmd = m[2].trim();
+      return cmd === 'claude' && pid !== process.pid ? pid : null;
+    })
+    .filter(Boolean);
+  return pids[0] || null;
+}
+
+// --- Réveil session : ouvre Terminal.app et lance `claude` dans MasterClaude ---
+async function wakeClaudeSession() {
+  await send('🚀 Réveil d\'une nouvelle session Claude…').catch(() => {});
+  // osascript : active Terminal puis exécute la commande dans une nouvelle fenêtre
+  const cmd = `cd ${ROOT} && claude`;
+  const script = `tell application "Terminal"
+  activate
+  do script "${cmd}"
+end tell`;
+  const r = spawnSync('osascript', ['-e', script], { encoding: 'utf8', timeout: 10000 });
+  if (r.status !== 0) {
+    process.stderr.write(`[wake] osascript échec (status=${r.status}): ${r.stderr}\n`);
+    await send('❌ Réveil échoué — autorise Terminal.app dans Réglages → Confidentialité → Automation, puis réessaie.').catch(() => {});
+    return false;
+  }
+  process.stdout.write('[wake] Terminal lancé, attente du signal file…\n');
+  // Le hook SessionStart écrit le signal file → polling 30s max
+  for (let i = 0; i < 60; i++) {
+    const sig = readSessionSignal();
+    if (sig.valid) {
+      process.stdout.write(`[wake] session active PID=${sig.claudePid}\n`);
+      return true;
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  process.stderr.write('[wake] timeout 30s — pas de signal file détecté\n');
+  await send('⚠️ Session Claude semble lancée mais le signal IPC n\'est pas arrivé. Vérifie le terminal.').catch(() => {});
+  return false;
+}
+
+// --- Restart : tue ancienne session puis réveille une nouvelle ---
+async function restartSession(oldPid, ctxPct) {
+  process.stdout.write(`[restart] ctx=${ctxPct}% — kill PID=${oldPid}\n`);
+  if (oldPid && isPidAlive(oldPid)) {
+    try { process.kill(oldPid, 'SIGTERM'); } catch (e) {
+      process.stderr.write(`[restart] SIGTERM raté: ${e.message}\n`);
+    }
+    // 10s de grâce pour finir proprement
+    for (let i = 0; i < 20; i++) {
+      if (!isPidAlive(oldPid)) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
+    if (isPidAlive(oldPid)) {
+      process.stdout.write(`[restart] grâce dépassée → SIGKILL\n`);
+      try { process.kill(oldPid, 'SIGKILL'); } catch {}
+    }
+  }
+  cleanupSignalFile();
+  // Ne pas annoncer la mort — la session recevra un nouveau réveil propre
+  return wakeClaudeSession();
+}
+
+// --- Single dispatch path : tout message Telegram passe par ici ---
+// Garanties : (1) jamais de subprocess fantôme, (2) auto-wake si pas de session,
+// (3) restart auto si ctx >= 60% APRÈS la réponse au tour courant.
+async function routeToClaude(userMsg, projectKey) {
+  // Étape 1 — assurer une session active. Trois cas :
+  //   (a) signal IPC valide → utiliser claudePid pour restart features
+  //   (b) signal stale MAIS un process `claude` tourne → écrire dans inbox quand même
+  //       (le Monitor tail -f de cette session lira et répondra ; pas de restart possible)
+  //   (c) aucun process claude → wake une nouvelle session
+  let sig = readSessionSignal();
+  let claudePid = null;
+  if (sig.valid) {
+    claudePid = sig.claudePid;
+  } else {
+    const existing = findExistingClaudeSession();
+    if (existing) {
+      claudePid = existing;
+      process.stdout.write(`[ipc] signal stale mais session ${claudePid} vivante — IPC direct\n`);
+    } else {
+      cleanupSignalFile();
+      process.stdout.write('[ipc] aucune session — auto-wake\n');
+      const woke = await wakeClaudeSession();
+      if (!woke) return '❌ Impossible de démarrer une session Claude. Vérifie Terminal.app et l\'autorisation Automation.';
+      sig = readSessionSignal();
+      if (!sig.valid) return '❌ Session lancée mais signal IPC absent. Réessaie dans quelques secondes.';
+      claudePid = sig.claudePid;
+    }
   }
 
+  // Étape 2 — détecter saturation contexte (restart APRÈS la réponse, pas pendant)
+  const ctxPct = getCtxPct();
+  let pendingRestart = false;
+  if (ctxPct >= CTX_RESTART_THRESHOLD) {
+    pendingRestart = true;
+    await send(`🔄 Contexte ${ctxPct}% (≥ ${CTX_RESTART_THRESHOLD}%) — je relance Claude juste après cette réponse.`).catch(() => {});
+  }
+
+  // Étape 3 — dispatch via IPC (fichier inbox + polling response file)
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const responseFile = join(RESPONSE_DIR, `${id}.txt`);
   const entry = JSON.stringify({ id, ts: Date.now(), user: userMsg, project: projectKey });
@@ -369,11 +448,9 @@ async function askRealClaude(userMsg, projectKey) {
   try {
     _wfs(INBOX_FILE, entry + '\n', { flag: 'a' });
   } catch (e) {
-    process.stderr.write(`[ipc] erreur write inbox: ${e.message}\n`);
-    return askClaude(userMsg, projectKey);
+    return `❌ Erreur écriture inbox : ${e.message}`;
   }
-
-  process.stdout.write(`[ipc] msg→THIS session (id=${id})\n`);
+  process.stdout.write(`[ipc] msg→Claude PID=${claudePid} (id=${id})\n`);
 
   const ackTimer = setTimeout(async () => {
     await send('⚙️ Je traite…').catch(() => {});
@@ -384,22 +461,46 @@ async function askRealClaude(userMsg, projectKey) {
     await send(`⏳ Toujours en cours… (${heartbeatCount * 60}s)`).catch(() => {});
   }, 60000);
 
-  return new Promise((resolve) => {
+  // Étape 4 — attendre la réponse (pas de timeout dur — le user accepte d'attendre)
+  // Garde-fous : (a) cap 10 min ultime, (b) abandon si la session meurt en route
+  const response = await new Promise((resolve) => {
     const start = Date.now();
     const poll = setInterval(() => {
       if (_exists(responseFile)) {
         clearTimeout(ackTimer); clearInterval(heartbeat); clearInterval(poll);
-        const response = _rfs(responseFile, 'utf8').trim();
+        const content = _rfs(responseFile, 'utf8').trim();
+        // Marker .done : empêche le hook session-ipc-bridge de re-traiter ce message
+        // au réveil d'une nouvelle session (les .txt sont consommés ici, mais le marker reste).
+        try { _wfs(`${responseFile}.done`, ''); } catch {}
         try { _unlink(responseFile); } catch {}
-        resolve(response || '(vide)');
-      } else if (Date.now() - start > 45000) {
-        // 45s sans réponse → fallback subprocess
+        resolve(content || '(vide)');
+        return;
+      }
+      // Détection session morte pendant le traitement
+      if (claudePid && !isPidAlive(claudePid)) {
         clearTimeout(ackTimer); clearInterval(heartbeat); clearInterval(poll);
-        process.stdout.write(`[ipc] timeout 45s — fallback subprocess (id=${id})\n`);
-        askClaude(userMsg, projectKey).then(resolve);
+        cleanupSignalFile();
+        resolve('💀 Session Claude morte pendant le traitement. Renvoie ton message — je relancerai automatiquement.');
+        return;
+      }
+      // Cap dur 10 min (session vivante mais figée)
+      if (Date.now() - start > 600000) {
+        clearTimeout(ackTimer); clearInterval(heartbeat); clearInterval(poll);
+        resolve('⏱ Pas de réponse après 10 min. La session est peut-être figée — tape `/health` pour vérifier.');
       }
     }, 500);
   });
+
+  // Étape 5 — restart différé après livraison de la réponse au user
+  if (pendingRestart) {
+    setImmediate(() => {
+      restartSession(claudePid, ctxPct).catch(e =>
+        process.stderr.write(`[restart] erreur: ${e.message}\n`)
+      );
+    });
+  }
+
+  return response;
 }
 
 // --- Spawn session Claude sur un projet — outils complets, zéro confirmation ---
@@ -458,18 +559,19 @@ function handleSystemCommand(text) {
   if (text === '/status') return `✅ Master actif — PID ${process.pid}\nVault : ${VAULT_PATH}`;
   if (text === '/health') {
     const lines = [`🩺 Health — PID ${process.pid}`, `Uptime : ${Math.round(process.uptime())}s`];
-    // Signal file IPC
-    if (_exists(REAL_CLAUDE_ACTIVE_FILE)) {
-      try {
-        const sig = _rfs(REAL_CLAUDE_ACTIVE_FILE, 'utf8').trim();
-        const ts = parseInt(sig.split(':')[0], 10);
-        const pid = sig.split(':')[1] || '?';
-        const age = Math.round(Date.now() / 1000 - ts);
-        const stale = age > 600;
-        lines.push(`IPC session : ${stale ? '⚠️ périmée' : '🟢 active'} (PID=${pid}, ${age}s)`);
-      } catch { lines.push('IPC signal : ⚠️ illisible'); }
+    // Signal file IPC + ctx%
+    const sigInfo = readSessionSignal();
+    if (sigInfo.valid) {
+      lines.push(`IPC session : 🟢 active (PID=${sigInfo.claudePid}, ${sigInfo.ageS}s)`);
+    } else if (sigInfo.claudePid) {
+      lines.push(`IPC session : ⚠️ invalide (PID=${sigInfo.claudePid} mort ou signal périmé ${sigInfo.ageS || '?'}s)`);
     } else {
-      lines.push('IPC session : ⬛ absente → fallback subprocess');
+      lines.push('IPC session : ⬛ absente → auto-wake au prochain message');
+    }
+    const ctxPct = getCtxPct();
+    if (ctxPct > 0) {
+      const tag = ctxPct >= 60 ? '🚨' : ctxPct >= 50 ? '🔥' : ctxPct >= 35 ? '🟡' : '✅';
+      lines.push(`Contexte session : ${ctxPct}% ${tag} (restart auto à ${CTX_RESTART_THRESHOLD}%)`);
     }
     // Transcribe socket
     lines.push(`Transcribe : ${_exists(TRANSCRIBE_SOCK) ? '🟢 socket ok' : '⬛ inactif'}`);
@@ -608,10 +710,10 @@ while (running) {
         continue;
       }
 
-      // Message → Claude (session persistante via --continue)
+      // Message → Claude (single path : IPC vers session active, auto-wake si absente)
       const projectKey = sessions.active?.name || 'global';
       try {
-        const reply = await askRealClaude(text, projectKey);
+        const reply = await routeToClaude(text, projectKey);
         if (reply) {
           await send(reply).catch(e =>
             process.stderr.write(`[master] erreur send: ${e.message}\n`)
