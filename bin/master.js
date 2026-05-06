@@ -6,6 +6,7 @@
  * Modules : vault-loader (E3) · session-manager (E2) · context-monitor (E4)
  */
 
+import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import { readFileSync, existsSync, createWriteStream, unlinkSync } from 'node:fs';
@@ -76,6 +77,25 @@ const INBOX_FILE = '/tmp/tg-inbox.jsonl';
 const RESPONSE_DIR = '/tmp/tg-responses';
 const REAL_CLAUDE_ACTIVE_FILE = '/tmp/masterclaude-real-claude-active';
 _mkdir(RESPONSE_DIR, { recursive: true });
+
+// Parachute alerts poller — forward /tmp/parachute-alerts.jsonl vers Telegram.
+const PARACHUTE_ALERTS_FILE = '/tmp/parachute-alerts.jsonl';
+let _alertsLinesSeen = 0;
+try { _alertsLinesSeen = _rfs(PARACHUTE_ALERTS_FILE, 'utf8').split('\n').filter(Boolean).length; } catch {}
+function pollParachuteAlerts() {
+  try {
+    const lines = _rfs(PARACHUTE_ALERTS_FILE, 'utf8').split('\n').filter(Boolean);
+    const newLines = lines.slice(_alertsLinesSeen);
+    _alertsLinesSeen = lines.length;
+    for (const line of newLines) {
+      try {
+        const { message } = JSON.parse(line);
+        if (message) send(message).catch(() => {});
+      } catch {}
+    }
+  } catch {}
+}
+
 import { SessionManager } from '../src/master/session-manager.js';
 import { MemoryStore } from '../src/master/memory-store.js';
 
@@ -112,6 +132,75 @@ function loadEnv(path) {
 }
 loadEnv(join(ROOT, '.env'));
 loadEnv(join(ROOT, '.env.local'));
+
+// --- Feature flags parachute (Étape 6) ---
+const PARACHUTE_BASE = process.env.PARACHUTE_BASE || 'http://127.0.0.1:4001';
+const PARACHUTE_TOKEN_HDR = process.env.PARACHUTE_TOKEN ? `Bearer ${process.env.PARACHUTE_TOKEN}` : '';
+const FLAG_TELEGRAM = process.env.PARACHUTE_TELEGRAM_TAKEOVER === '1';
+const FLAG_SESSION  = process.env.PARACHUTE_SESSION_TAKEOVER === '1';
+const FLAG_HANDOFF  = process.env.PARACHUTE_HANDOFF_TAKEOVER === '1';
+
+if (FLAG_SESSION || FLAG_HANDOFF || FLAG_TELEGRAM) {
+  process.stdout.write(`[master] parachute flags: telegram=${FLAG_TELEGRAM} session=${FLAG_SESSION} handoff=${FLAG_HANDOFF}\n`);
+}
+
+/** Appelle l'API HTTP parachute (port 4001). */
+function parachuteRequest(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : null;
+    const url = new URL(PARACHUTE_BASE + path);
+    const opts = {
+      hostname: url.hostname,
+      port: parseInt(url.port, 10) || 4001,
+      path: url.pathname,
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(PARACHUTE_TOKEN_HDR ? { Authorization: PARACHUTE_TOKEN_HDR } : {}),
+        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+      },
+    };
+    const req = http.request(opts, res => {
+      let raw = '';
+      res.on('data', c => raw += c);
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(raw) }); }
+        catch { resolve({ status: res.statusCode, body: raw }); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(10000, () => req.destroy(new Error('parachute timeout')));
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+/** Appelle le Unix socket parachute (/tmp/parachute.sock). */
+function parachuteSocketRequest(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : null;
+    const req = http.request({
+      socketPath: '/tmp/parachute.sock',
+      path,
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+      },
+    }, res => {
+      let raw = '';
+      res.on('data', c => raw += c);
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(raw) }); }
+        catch { resolve({ status: res.statusCode, body: raw }); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(10000, () => req.destroy(new Error('parachute socket timeout')));
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
 
 // Claude Code utilise OAuth Max plan — la clé API ne doit JAMAIS être héritée par les enfants
 delete process.env.ANTHROPIC_API_KEY;
@@ -388,6 +477,38 @@ async function wakeClaudeSession() {
   }
   try { _wfs(WAKE_LOCK_FILE, `${Date.now()}\n`); } catch {}
 
+  // FLAG_SESSION : déléguer le spawn à parachute (vault injecté automatiquement).
+  if (FLAG_SESSION) {
+    const projectKey = sessions.active?.name || 'global';
+    const cwd = sessions.active ? sessions.active.path : ROOT;
+    try {
+      const res = await parachuteRequest('POST', `/v1/sessions/${encodeURIComponent(projectKey)}/spawn`, { cwd });
+      process.stdout.write(`[wake] parachute spawn status=${res.status} project=${projectKey}\n`);
+      if (res.status === 201) {
+        await send('🚀 Session Claude démarrée via parachute (vault injecté).').catch(() => {});
+        for (let i = 0; i < 60; i++) {
+          if (readSessionSignal().valid) { try { _unlink(WAKE_LOCK_FILE); } catch {} return true; }
+          await new Promise(r => setTimeout(r, 500));
+        }
+        try { _unlink(WAKE_LOCK_FILE); } catch {}
+        await send('⚠️ Signal IPC absent après spawn parachute. Vérifie le terminal.').catch(() => {});
+        return false;
+      }
+      if (res.status === 409) {
+        // Déjà active — attendre le signal
+        for (let i = 0; i < 60; i++) {
+          if (readSessionSignal().valid) { try { _unlink(WAKE_LOCK_FILE); } catch {} return true; }
+          await new Promise(r => setTimeout(r, 500));
+        }
+        try { _unlink(WAKE_LOCK_FILE); } catch {}
+        return readSessionSignal().valid;
+      }
+      process.stderr.write(`[wake] parachute spawn échoué (${res.status}) — fallback osascript\n`);
+    } catch (e) {
+      process.stderr.write(`[wake] parachute spawn error: ${e.message} — fallback osascript\n`);
+    }
+  }
+
   await send('🚀 Réveil d\'une nouvelle session Claude…').catch(() => {});
   // osascript : active Terminal puis exécute la commande dans une nouvelle fenêtre.
   // Path entre quotes simples côté shell pour résister aux espaces/specials.
@@ -483,6 +604,35 @@ async function executeMigration(claudePid, projectKey, reason) {
   }
 
   await send('📦 Handoff prêt. Migration en cours…').catch(() => {});
+
+  // FLAG_HANDOFF + FLAG_SESSION : migration complète via Unix socket parachute.
+  if (FLAG_HANDOFF && FLAG_SESSION) {
+    try {
+      const handoffBody = JSON.parse(_rfs(handoffFile, 'utf8'));
+      const cwd = sessions.active ? sessions.active.path : ROOT;
+      const res = await parachuteSocketRequest('POST', '/v1/migrate', {
+        project_key: projectKey,
+        cwd,
+        handoff: handoffBody,
+      });
+      if (res.status === 200) {
+        return `✅ Migration parachute effectuée — ${res.body?.status || 'ok'}`;
+      }
+      process.stderr.write(`[migrate] parachute socket: ${res.status} — fallback legacy\n`);
+    } catch (e) {
+      process.stderr.write(`[migrate] parachute socket error: ${e.message} — fallback legacy\n`);
+    }
+  } else if (FLAG_HANDOFF) {
+    // Copie le handoff dans parachute SQLite (en plus du fichier legacy).
+    try {
+      const handoffBody = JSON.parse(_rfs(handoffFile, 'utf8'));
+      await parachuteRequest('POST', `/v1/handoff/${encodeURIComponent(projectKey)}`, handoffBody);
+      process.stdout.write(`[migrate] handoff copié dans parachute SQLite\n`);
+    } catch (e) {
+      process.stderr.write(`[migrate] parachute handoff write: ${e.message}\n`);
+    }
+  }
+
   await restartSession(claudePid, getCtxPct());
   return '✅ Migration effectuée. La nouvelle session restaurera le handoff au boot.';
 }
@@ -666,6 +816,9 @@ function handleSystemCommand(text) {
       lines.push(`Inbox : ${stat.size} octets`);
     } catch { lines.push('Inbox : absente'); }
     lines.push(`Projet actif : ${sessions.active?.name || 'global'}`);
+    if (FLAG_SESSION || FLAG_HANDOFF || FLAG_TELEGRAM) {
+      lines.push(`Parachute : telegram=${FLAG_TELEGRAM} session=${FLAG_SESSION} handoff=${FLAG_HANDOFF}`);
+    }
     return lines.join('\n');
   }
   if (text === '/reset') {
@@ -700,6 +853,7 @@ process.on('SIGINT', () => { running = false; cleanupSignalFile(); process.exit(
 
 process.stdout.write(`[master] démarré PID=${process.pid} vault=${VAULT_PATH}\n`);
 ensureTranscribeDaemon();
+setInterval(pollParachuteAlerts, 30000);
 
 await send('🟢 Master Claude Atelier en ligne\nTape /help pour les commandes.').catch(e => {
   process.stderr.write(`[master] warn: ${e.message}\n`);

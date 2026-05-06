@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/malikkaraoui/MasterClaude/parachute/internal/health"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/migrate"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/server"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/sessions"
@@ -50,6 +52,18 @@ func main() {
 	}
 
 	mgr := sessions.New(st, logger)
+
+	alertFn := func(component, message string) {
+		slog.Warn("health alert", "component", component, "message", message)
+		if f, err := os.OpenFile("/tmp/parachute-alerts.jsonl", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			fmt.Fprintf(f, `{"ts":%d,"component":%q,"message":%q}`+"\n", time.Now().Unix(), component, message)
+			f.Close()
+		}
+	}
+	checker := health.New(alertFn, 2)
+	checker.Register("ollama")
+	checker.Register("ollama-proxy")
+
 	srv := server.NewWithSessions(st, token, mgr)
 	migrateHandler := migrate.NewHandler(st, mgr, logger)
 
@@ -85,6 +99,21 @@ func main() {
 				if dead := mgr.CheckDeadSessions(); len(dead) > 0 {
 					slog.Warn("sessions mortes détectées", "projects", dead)
 				}
+			}
+		}
+	}()
+
+	// Health pings — Ollama + proxy toutes les 30s.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				checker.CheckHTTP("ollama", "http://127.0.0.1:11434")
+				checker.CheckHTTP("ollama-proxy", "http://127.0.0.1:4000/health")
 			}
 		}
 	}()
