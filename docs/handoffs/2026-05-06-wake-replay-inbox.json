@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "subject": "IPC Telegram → Claude : détection session Terminal-only + replay inbox orphans au wake",
+    "date": "2026-05-06",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "3754c6f..0490398"
+  },
+  "from": {
+    "model": "claude-opus-4-7",
+    "context": "Bug fix critique sur le bridge IPC Telegram → session Claude Code. Trois problèmes corrigés :\n\n1. **Re-spawn intempestif** : master.js ouvrait une nouvelle fenêtre Terminal à chaque message Telegram quand le signal file IPC était périmé, même si une session claude tournait déjà. Ajout de `findExistingClaudeSession()` qui filtre `ps -axo pid,command` sur `command == \"claude\"` exact (CLI Terminal), excluant VS Code (`/Users/.../.vscode/extensions/.../native-binary/claude --output-format stream-json ...`) et Claude.app. `routeToClaude` utilise désormais : signal valide → IPC normal ; signal stale + process claude vivant → IPC direct via inbox (pas de wake) ; aucun process claude → wake unique.\n\n2. **Messages perdus au réveil** : le hook `session-ipc-bridge.sh` instruisait Claude de lancer `Monitor tail -f -n 0 /tmp/tg-inbox.jsonl` au démarrage. `-n 0` démarre depuis la fin → la nouvelle session ratait le message qui l'avait réveillée. Refactor du hook : avant d'instruire le Monitor, le script Python identifie les messages orphelins (lignes inbox sans `<id>.txt` ni `<id>.done` dans `/tmp/tg-responses/`, fenêtre 10 min, max 5) et les injecte dans `additionalContext`. Claude les traite EN PREMIER, écrit la réponse dans le response file, PUIS lance le Monitor pour les futurs messages.\n\n3. **Marker .done pour anti-double-traitement** : master.js `_unlink(responseFile)` après envoi sur Telegram → les messages déjà répondus pouvaient apparaître comme orphelins au prochain wake. Ajout d'un marker `<id>.done` créé avant l'unlink, persistant 1h (cleanup find dans le hook).\n\nPipeline : 2 commits (`36c787c`, `0490398`), 4 fichiers, +366/-123 lignes. Pre-push gate verte (secrets, lint, tests Telegram 26/26, manifest sync, handoff debt).\n\nLe commit chore additionnel synchronise `.claude/hooks-manifest.json` (entrée `guard-header-check` manquante + sha256 drift sur 3 hooks après modifications) et élargit `.claude/settings.json` allow list (Bash glob sur npm/git/gh/python3/ps/kill, deny list inchangée pour rm -rf, sudo, --force, pipe-to-shell).",
+    "question": "Le mécanisme replay-orphans est-il robuste face à : (a) une rafale de messages Telegram pendant le wake (race entre Python script et écriture inbox concurrente par master.js), (b) un message Telegram qui aurait `id` vide ou JSON malformé dans l'inbox, (c) un response file `<id>.txt` que Claude écrit MAIS qu'on tue avant que master.js ait pu le marker `.done` (orphan permanent au prochain wake) ? Identifiez aussi tout angle mort dans `findExistingClaudeSession()` : si l'utilisateur lance `claude` via un wrapper (alias, fonction shell), la commande pourrait apparaître autrement que `\"claude\"` exact dans `ps`.",
+    "filesToRead": [
+      "bin/master.js",
+      "hooks/session-ipc-bridge.sh",
+      ".claude/settings.json",
+      ".claude/hooks-manifest.json",
+      "scripts/pre-push-gate.sh"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
