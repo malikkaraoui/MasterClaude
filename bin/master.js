@@ -7,12 +7,70 @@
  */
 
 import https from 'node:https';
-import { readFileSync, existsSync } from 'node:fs';
+import net from 'node:net';
+import { readFileSync, existsSync, createWriteStream, unlinkSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir } from 'node:fs';
 import { loadVaultBrief } from '../src/master/vault-loader.js';
+
+// Transcription daemon
+const TRANSCRIBE_SOCK = '/tmp/tg-transcribe.sock';
+const TRANSCRIBE_SCRIPT = join(resolve(__dirname, '..'), 'scripts', 'transcribe-daemon.py');
+
+function ensureTranscribeDaemon() {
+  if (_exists(TRANSCRIBE_SOCK)) return;
+  const proc = spawn('python3', [TRANSCRIBE_SCRIPT], {
+    detached: true,
+    stdio: 'ignore',
+    env: { ...process.env },
+  });
+  proc.unref();
+  process.stdout.write(`[transcribe] daemon lancé PID=${proc.pid}\n`);
+}
+
+function httpsDownload(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const file = createWriteStream(destPath);
+    https.get(url, res => {
+      res.pipe(file);
+      file.on('finish', () => file.close(resolve));
+    }).on('error', e => { try { unlinkSync(destPath); } catch {} reject(e); });
+  });
+}
+
+async function downloadVoice(fileId) {
+  const info = await tgPost('getFile', { file_id: fileId });
+  if (!info.ok) throw new Error(`getFile échoué: ${JSON.stringify(info)}`);
+  const filePath = info.result.file_path;
+  const url = `https://api.telegram.org/file/bot${TOKEN}/${filePath}`;
+  const ext = filePath.split('.').pop() || 'oga';
+  const dest = `/tmp/tg-voice-${fileId}.${ext}`;
+  await httpsDownload(url, dest);
+  return dest;
+}
+
+function transcribeAudio(audioPath, language = 'fr') {
+  return new Promise((resolve, reject) => {
+    const sock = net.createConnection(TRANSCRIBE_SOCK);
+    let buf = '';
+    const timer = setTimeout(() => { sock.destroy(); reject(new Error('transcription timeout')); }, 60000);
+    sock.on('connect', () => {
+      sock.write(JSON.stringify({ audio_path: audioPath, language }) + '\n');
+    });
+    sock.on('data', d => { buf += d.toString(); });
+    sock.on('end', () => {
+      clearTimeout(timer);
+      try {
+        const resp = JSON.parse(buf.trim());
+        if (resp.error) reject(new Error(resp.error));
+        else resolve(resp.transcript || '(vide)');
+      } catch (e) { reject(e); }
+    });
+    sock.on('error', reject);
+  });
+}
 
 // IPC bridge — THIS session répond directement (fichier signaux)
 const INBOX_FILE = '/tmp/tg-inbox.jsonl';
@@ -394,6 +452,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', () => { running = false; process.exit(0); });
 
 process.stdout.write(`[master] démarré PID=${process.pid} vault=${VAULT_PATH}\n`);
+ensureTranscribeDaemon();
 
 await send('🟢 Master Claude Atelier en ligne\nTape /help pour les commandes.').catch(e => {
   process.stderr.write(`[master] warn: ${e.message}\n`);
@@ -415,8 +474,36 @@ while (running) {
       saveOffset(offset);
 
       const msg = upd.message;
-      if (!msg?.text) continue;
+      if (!msg) continue;
       if (String(msg.chat.id) !== CHAT_ID) continue;
+
+      // Message vocal → transcription via daemon Whisper
+      if (msg.voice || msg.audio) {
+        const fileId = (msg.voice || msg.audio).file_id;
+        let audioPath;
+        try {
+          await send('🎙️ Transcription en cours…').catch(() => {});
+          audioPath = await downloadVoice(fileId);
+          ensureTranscribeDaemon();
+          // Attendre que le socket soit prêt (max 5s)
+          for (let i = 0; i < 10; i++) {
+            if (_exists(TRANSCRIBE_SOCK)) break;
+            await new Promise(r => setTimeout(r, 500));
+          }
+          const transcript = await transcribeAudio(audioPath);
+          try { unlinkSync(audioPath); } catch {}
+          // Réinjecter comme texte dans le flux normal
+          msg.text = transcript;
+          process.stdout.write(`[voice] transcrit: ${transcript.slice(0, 80)}\n`);
+        } catch (e) {
+          process.stderr.write(`[voice] erreur: ${e.message}\n`);
+          await send(`❌ Transcription échouée : ${e.message}`).catch(() => {});
+          if (audioPath) try { unlinkSync(audioPath); } catch {}
+          continue;
+        }
+      }
+
+      if (!msg?.text) continue;
 
       const text = msg.text.trim();
       process.stdout.write(`[master] reçu: ${text}\n`);

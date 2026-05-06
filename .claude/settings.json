@@ -7,7 +7,7 @@
     "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1"
   },
   "permissions": {
-    "defaultMode": "acceptEdits",
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Read",
       "Glob",
@@ -132,6 +132,17 @@
             "type": "command",
             "command": "bash \"hooks/guard-tests-before-push.sh\"",
             "if": "Bash(*git push*)"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"hooks/guard-header-check.sh\""
           }
         ]
       }
