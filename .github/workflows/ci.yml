@@ -21,10 +21,20 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
 
-      - name: Run full test suite (lint + doctor + hooks)
+      - name: Setup Python venv (Idriss + Léonor pytest)
+        run: |
+          python3 -m venv bin/.shared-venv
+          bin/.shared-venv/bin/pip install --quiet --upgrade pip
+          bin/.shared-venv/bin/pip install --quiet -r requirements.txt
+
+      - name: Run full test suite
         run: npm test
 
       - name: Doctor JSON output (artifact for debug)
