@@ -319,9 +319,16 @@ async function askClaude(userMsg, projectKey) {
   return new Promise((resolve) => {
     const proc = spawn('claude', args, { cwd: sessionDir, encoding: 'utf8', env: childEnv });
     let out = '';
-    const cleanup = () => { clearTimeout(ackTimer); clearInterval(heartbeat); };
+    const cleanup = () => { clearTimeout(ackTimer); clearInterval(heartbeat); clearTimeout(hardKill); };
+    // Timeout hard 90s — tue le subprocess et répond avec erreur
+    const hardKill = setTimeout(() => {
+      proc.kill('SIGTERM');
+      cleanup();
+      process.stdout.write('[askClaude] timeout 90s — subprocess tué\n');
+      resolve('⏱ Délai dépassé (90s). Réessaie ou envoie `/run` pour une tâche longue.');
+    }, 90000);
     proc.stdout.on('data', d => out += d);
-    proc.on('close', () => { cleanup(); resolve(out.trim()); });
+    proc.on('close', () => { cleanup(); resolve(out.trim() || '(vide)'); });
     proc.on('error', e => { cleanup(); resolve(`❌ Erreur CLI : ${e.message}`); });
   });
 }
