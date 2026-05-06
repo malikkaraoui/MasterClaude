@@ -26,6 +26,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/malikkaraoui/MasterClaude/parachute/internal/migrate"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/server"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/sessions"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/store"
@@ -50,6 +51,7 @@ func main() {
 
 	mgr := sessions.New(st, logger)
 	srv := server.NewWithSessions(st, token, mgr)
+	migrateHandler := migrate.NewHandler(st, mgr, logger)
 
 	httpSrv := &http.Server{
 		Addr:              *addr,
@@ -69,7 +71,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Watchdog : détecte les sessions mortes toutes les 30s, log + alerte future Telegram.
+	socketStop := make(chan struct{})
+
+	// Watchdog : détecte les sessions mortes toutes les 30s.
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -85,24 +89,36 @@ func main() {
 		}
 	}()
 
-	errCh := make(chan error, 1)
+	// Unix socket : migration bipartite Claude → parachute.
+	socketErr := make(chan error, 1)
+	go func() {
+		if err := migrateHandler.ListenAndServe(socketStop); err != nil {
+			socketErr <- err
+		}
+	}()
+
+	// HTTP API publique.
+	httpErr := make(chan error, 1)
 	go func() {
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
+			httpErr <- err
 		}
 	}()
 
 	select {
-	case err := <-errCh:
-		log.Fatalf("listen: %v", err)
+	case err := <-httpErr:
+		log.Fatalf("http: %v", err)
+	case err := <-socketErr:
+		log.Fatalf("socket: %v", err)
 	case <-ctx.Done():
 		log.Printf("signal reçu — shutdown gracieux…")
 	}
 
+	close(socketStop)
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := httpSrv.Shutdown(shutCtx); err != nil {
-		log.Printf("shutdown: %v", err)
+		log.Printf("shutdown http: %v", err)
 	}
 	log.Printf("parachute arrêté.")
 }
