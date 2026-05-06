@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	heartbeatInterval  = 30 * time.Second
-	deadTimeout        = 2 * heartbeatInterval
-	vaultPath          = "/Users/malik/Vault/Malik"
+	heartbeatInterval       = 30 * time.Second
+	deadTimeout             = 2 * heartbeatInterval
+	defaultVaultPath        = "/Users/malik/Vault/Malik"
+	envVaultPath            = "PARACHUTE_VAULT_PATH"
 )
 
 // SessionState représente l'état d'une session Claude active.
@@ -33,17 +34,23 @@ type SessionState struct {
 
 // Manager orchestre les sessions Claude par projet. Thread-safe.
 type Manager struct {
-	mu       sync.RWMutex
-	sessions map[string]*SessionState
-	store    *store.Store
-	log      *slog.Logger
+	mu        sync.RWMutex
+	sessions  map[string]*SessionState
+	store     *store.Store
+	log       *slog.Logger
+	vaultPath string
 }
 
 func New(s *store.Store, log *slog.Logger) *Manager {
+	vp := os.Getenv(envVaultPath)
+	if vp == "" {
+		vp = defaultVaultPath
+	}
 	return &Manager{
-		sessions: make(map[string]*SessionState),
-		store:    s,
-		log:      log,
+		sessions:  make(map[string]*SessionState),
+		store:     s,
+		log:       log,
+		vaultPath: vp,
 	}
 }
 
@@ -147,7 +154,7 @@ func (m *Manager) CheckDeadSessions() []string {
 
 // buildSystemPrompt assemble vault + handoff en un bloc < 800 tokens.
 func (m *Manager) buildSystemPrompt(projectKey string) (string, string, error) {
-	vctx, err := vault.LoadVaultContext(vaultPath)
+	vctx, err := vault.LoadVaultContext(m.vaultPath)
 	if err != nil {
 		return "", "", err
 	}
@@ -164,7 +171,9 @@ func (m *Manager) buildSystemPrompt(projectKey string) (string, string, error) {
 }
 
 // spawnClaude lance claude CLI dans cwd via osascript (Terminal macOS).
-// Retourne le PID du processus Terminal spawné.
+// Retourne le PID du processus osascript — NB : ce PID sera mort quelques
+// secondes après le spawn (osascript exit). Il identifie l'opération de
+// spawn, pas le processus Claude lui-même. Kill envoie SIGINT best-effort.
 func spawnClaude(cwd, systemPrompt string) (int, error) {
 	claudePath, err := exec.LookPath("claude")
 	if err != nil {
