@@ -91,7 +91,10 @@ func (m *Manager) Spawn(projectKey, cwd string) error {
 	return nil
 }
 
-// Kill arrête proprement la session d'un projet.
+// Kill arrête la session d'un projet.
+// Envoie SIGINT best-effort au PID enregistré (= PID osascript, déjà terminé
+// après le spawn). La suppression de la session du registre est toujours
+// effectuée, même si le signal échoue.
 func (m *Manager) Kill(projectKey string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
