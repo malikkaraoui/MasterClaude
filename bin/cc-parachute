@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# cc-parachute — client shell minimal pour le daemon parachute (Go, :4001).
+# Usage:
+#   cc-parachute health
+#   cc-parachute push <projectKey> <handoff.json>
+#   cc-parachute get <projectKey>            # affiche sur stdout (404 → exit 4)
+#   cc-parachute consume <projectKey>        # idem mais supprime côté serveur
+#   cc-parachute list
+#
+# Variables d'env :
+#   PARACHUTE_URL    défaut: http://127.0.0.1:4001
+#   PARACHUTE_TOKEN  bearer optionnel
+
+set -eu
+
+URL="${PARACHUTE_URL:-http://127.0.0.1:4001}"
+AUTH=()
+if [ -n "${PARACHUTE_TOKEN:-}" ]; then
+  AUTH=(-H "Authorization: Bearer ${PARACHUTE_TOKEN}")
+fi
+
+cmd="${1:-}"
+case "$cmd" in
+  health)
+    curl -fsS "${AUTH[@]+"${AUTH[@]}"}" "$URL/health"
+    echo
+    ;;
+  push)
+    [ $# -ge 3 ] || { echo "usage: cc-parachute push <projectKey> <file.json>" >&2; exit 2; }
+    key="$2"; file="$3"
+    [ -f "$file" ] || { echo "fichier introuvable: $file" >&2; exit 2; }
+    curl -fsS "${AUTH[@]+"${AUTH[@]}"}" -X POST "$URL/v1/handoff/$key" \
+      -H "Content-Type: application/json" \
+      --data-binary @"$file"
+    echo
+    ;;
+  get)
+    [ $# -ge 2 ] || { echo "usage: cc-parachute get <projectKey>" >&2; exit 2; }
+    key="$2"
+    code=$(curl -s -o /tmp/cc-parachute-get.$$.json -w "%{http_code}" "${AUTH[@]+"${AUTH[@]}"}" "$URL/v1/handoff/$key")
+    if [ "$code" = "200" ]; then
+      cat /tmp/cc-parachute-get.$$.json
+      echo
+      rm -f /tmp/cc-parachute-get.$$.json
+    elif [ "$code" = "404" ]; then
+      rm -f /tmp/cc-parachute-get.$$.json
+      exit 4
+    else
+      cat /tmp/cc-parachute-get.$$.json >&2
+      rm -f /tmp/cc-parachute-get.$$.json
+      exit 1
+    fi
+    ;;
+  consume)
+    [ $# -ge 2 ] || { echo "usage: cc-parachute consume <projectKey>" >&2; exit 2; }
+    key="$2"
+    code=$(curl -s -o /tmp/cc-parachute-consume.$$.json -w "%{http_code}" \
+      "${AUTH[@]+"${AUTH[@]}"}" -X POST "$URL/v1/handoff/$key/consume")
+    if [ "$code" = "200" ]; then
+      cat /tmp/cc-parachute-consume.$$.json
+      echo
+      rm -f /tmp/cc-parachute-consume.$$.json
+    elif [ "$code" = "404" ]; then
+      rm -f /tmp/cc-parachute-consume.$$.json
+      exit 4
+    else
+      cat /tmp/cc-parachute-consume.$$.json >&2
+      rm -f /tmp/cc-parachute-consume.$$.json
+      exit 1
+    fi
+    ;;
+  list)
+    curl -fsS "${AUTH[@]+"${AUTH[@]}"}" "$URL/v1/projects"
+    echo
+    ;;
+  ""|"-h"|"--help"|"help")
+    sed -n '2,12p' "$0" | sed 's/^# //; s/^#//'
+    ;;
+  *)
+    echo "commande inconnue: $cmd (voir 'cc-parachute help')" >&2
+    exit 2
+    ;;
+esac
