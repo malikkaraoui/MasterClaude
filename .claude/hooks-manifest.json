@@ -269,7 +269,7 @@
       "exitCodes": {
         "0": "always (warning only, never blocks)"
       },
-      "sha256": "3b2e01067b438e47"
+      "sha256": "f58d9b4a49f2c40f"
     },
     {
       "name": "guard-hooks-reload",
