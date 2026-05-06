@@ -7,12 +7,69 @@
  */
 
 import https from 'node:https';
-import { readFileSync, existsSync } from 'node:fs';
+import net from 'node:net';
+import { readFileSync, existsSync, createWriteStream, unlinkSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir } from 'node:fs';
+import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir, statSync as _stat } from 'node:fs';
 import { loadVaultBrief } from '../src/master/vault-loader.js';
+
+// Transcription daemon (TRANSCRIBE_SCRIPT défini après __dirname, ligne ~27)
+const TRANSCRIBE_SOCK = '/tmp/tg-transcribe.sock';
+
+function ensureTranscribeDaemon() {
+  if (_exists(TRANSCRIBE_SOCK)) return;
+  const proc = spawn('python3', [TRANSCRIBE_SCRIPT], {
+    detached: true,
+    stdio: 'ignore',
+    env: { ...process.env },
+  });
+  proc.unref();
+  process.stdout.write(`[transcribe] daemon lancé PID=${proc.pid}\n`);
+}
+
+function httpsDownload(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const file = createWriteStream(destPath);
+    https.get(url, res => {
+      res.pipe(file);
+      file.on('finish', () => file.close(resolve));
+    }).on('error', e => { try { unlinkSync(destPath); } catch {} reject(e); });
+  });
+}
+
+async function downloadVoice(fileId) {
+  const info = await tgPost('getFile', { file_id: fileId });
+  if (!info.ok) throw new Error(`getFile échoué: ${JSON.stringify(info)}`);
+  const filePath = info.result.file_path;
+  const url = `https://api.telegram.org/file/bot${TOKEN}/${filePath}`;
+  const ext = filePath.split('.').pop() || 'oga';
+  const dest = `/tmp/tg-voice-${fileId}.${ext}`;
+  await httpsDownload(url, dest);
+  return dest;
+}
+
+function transcribeAudio(audioPath, language = 'fr') {
+  return new Promise((resolve, reject) => {
+    const sock = net.createConnection(TRANSCRIBE_SOCK);
+    let buf = '';
+    const timer = setTimeout(() => { sock.destroy(); reject(new Error('transcription timeout')); }, 60000);
+    sock.on('connect', () => {
+      sock.write(JSON.stringify({ audio_path: audioPath, language }) + '\n');
+    });
+    sock.on('data', d => { buf += d.toString(); });
+    sock.on('end', () => {
+      clearTimeout(timer);
+      try {
+        const resp = JSON.parse(buf.trim());
+        if (resp.error) reject(new Error(resp.error));
+        else resolve(resp.transcript || '(vide)');
+      } catch (e) { reject(e); }
+    });
+    sock.on('error', reject);
+  });
+}
 
 // IPC bridge — THIS session répond directement (fichier signaux)
 const INBOX_FILE = '/tmp/tg-inbox.jsonl';
@@ -24,17 +81,22 @@ import { MemoryStore } from '../src/master/memory-store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
+const TRANSCRIBE_SCRIPT = join(ROOT, 'scripts', 'transcribe-daemon.py');
 
 // --- Lockfile : une seule instance ---
-const LOCKFILE = '/tmp/masterclaude-master.lock';
-if (_exists(LOCKFILE)) {
-  const pid = parseInt(_rfs(LOCKFILE, 'utf8').trim(), 10);
-  try {
-    process.kill(pid, 0);
-    process.stderr.write(`[master] instance déjà active (PID ${pid}) — sortie\n`);
-    process.exit(0);
-  } catch { /* lock périmé */ }
+// Singleton strict : tuer TOUS les bin/master.js existants sauf soi
+{
+  const { spawnSync: _ss } = await import('node:child_process');
+  const r = _ss('pgrep', ['-f', 'bin/master.js']);
+  const pids = (r.stdout?.toString() || '').trim().split('\n')
+    .map(p => parseInt(p, 10)).filter(p => p && p !== process.pid);
+  if (pids.length) {
+    for (const p of pids) { try { process.kill(p, 'SIGKILL'); } catch {} }
+    process.stderr.write(`[master] instances précédentes tuées : ${pids.join(',')} — démarrage PID=${process.pid}\n`);
+    await new Promise(r => setTimeout(r, 300));
+  }
 }
+const LOCKFILE = '/tmp/masterclaude-master.lock';
 _wfs(LOCKFILE, `${process.pid}\n`);
 process.on('exit', () => { try { _unlink(LOCKFILE); } catch {} });
 
@@ -178,11 +240,14 @@ const GH_EVENT_ICONS = {
 
 async function pollGitHub() {
   try {
-    const r = spawnSync('gh', ['api', '/users/malikkaraoui/events', '--paginate', '--jq', '.[0:30]'], {
+    const r = spawnSync('gh', ['api', '/users/malikkaraoui/events', '--jq', '.[0:30]'], {
       encoding: 'utf8', timeout: 15000
     });
     if (r.status !== 0 || !r.stdout) return;
-    const events = JSON.parse(r.stdout);
+    // Prendre uniquement la première ligne JSON valide (--paginate concatène plusieurs blocs)
+    const firstLine = r.stdout.trim().split('\n').find(l => l.trim().startsWith('['));
+    if (!firstLine) return;
+    const events = JSON.parse(firstLine);
     if (!Array.isArray(events) || events.length === 0) return;
 
     // Trouver les nouveaux events depuis le dernier ID connu
@@ -229,52 +294,153 @@ async function pollGitHub() {
   }
 }
 
-// --- Appel claude CLI — RAG memory (top-K échanges pertinents) + --continue ---
-async function askClaude(userMsg, projectKey) {
-  const sessionDir = getSessionDir(projectKey);
-  const system = buildSystemPrompt();
-  const relevant = await memory.retrieve(projectKey, userMsg);
-  if (relevant) {
-    process.stdout.write(`[memory] ${relevant.length} chars injectés (key=${projectKey})\n`);
-  }
-  const prompt = relevant
-    ? `${system}\n\n[Mémoire pertinente]\n${relevant}\n\n${userMsg}`
-    : `${system}\n\n${userMsg}`;
-  const args = ['--print', '--output-format', 'text', '--dangerously-skip-permissions', '--continue', '-p', prompt];
-  const childEnv = { ...process.env };
-  delete childEnv.ANTHROPIC_API_KEY; // Claude Code utilise OAuth Max plan, pas la clé API
+// --- Helpers : ctx%, PID alive, kill propre ---
+const CTX_PCT_FILE = '/tmp/masterclaude-ctx-pct';
+const CTX_RESTART_THRESHOLD = 60; // % au-delà duquel on relance la session
 
-  // Ack immédiat si la réponse tarde (> 8s)
-  let ackSent = false;
-  const ackTimer = setTimeout(async () => {
-    ackSent = true;
-    await send('⚙️ Je traite, ça prend un moment…').catch(() => {});
-  }, 8000);
-
-  // Heartbeat toutes les 60s — sans limite de durée
-  let heartbeatCount = 0;
-  const heartbeat = setInterval(async () => {
-    heartbeatCount++;
-    await send(`⏳ Toujours en cours… (${heartbeatCount * 60}s)`).catch(() => {});
-  }, 60000);
-
-  return new Promise((resolve) => {
-    const proc = spawn('claude', args, { cwd: sessionDir, encoding: 'utf8', env: childEnv });
-    let out = '';
-    const cleanup = () => { clearTimeout(ackTimer); clearInterval(heartbeat); };
-    proc.stdout.on('data', d => out += d);
-    proc.on('close', () => { cleanup(); resolve(out.trim()); });
-    proc.on('error', e => { cleanup(); resolve(`❌ Erreur CLI : ${e.message}`); });
-  });
+function getCtxPct() {
+  try {
+    const v = _rfs(CTX_PCT_FILE, 'utf8').trim();
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : 0;
+  } catch { return 0; }
 }
 
-// --- IPC bridge — route vers THIS session si active, fallback subprocess sinon ---
-async function askRealClaude(userMsg, projectKey) {
-  // Si THIS session n'est pas en écoute → fallback subprocess classique
-  if (!_exists(REAL_CLAUDE_ACTIVE_FILE)) {
-    return askClaude(userMsg, projectKey);
+function isPidAlive(pid) {
+  if (!pid || !Number.isFinite(pid)) return false;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+// Lit signal file → { valid, claudePid, ageS } (claudePid = parent_pid = process Claude Code)
+function readSessionSignal() {
+  if (!_exists(REAL_CLAUDE_ACTIVE_FILE)) return { valid: false };
+  try {
+    const sig = _rfs(REAL_CLAUDE_ACTIVE_FILE, 'utf8').trim();
+    const parts = sig.split(':');
+    const ts = parseInt(parts[0], 10);
+    // Format v1: "ts:shellPID" — Format v2: "ts:shellPID:parentPID"
+    const claudePid = parseInt(parts[2] || parts[1], 10);
+    if (!ts) return { valid: false };
+    const ageS = Math.round(Date.now() / 1000 - ts);
+    if (ageS > 600) return { valid: false, ageS, claudePid };
+    if (!isPidAlive(claudePid)) {
+      process.stdout.write(`[ipc] signal vivant mais PID=${claudePid} mort — invalidation\n`);
+      return { valid: false, ageS, claudePid };
+    }
+    return { valid: true, ageS, claudePid };
+  } catch {
+    return { valid: false };
+  }
+}
+
+// Détecte une session claude CLI Terminal interactive.
+// Discriminant : la commande complète vaut exactement "claude" (sans path ni args).
+// Exclut VS Code (binaire .vscode/extensions/.../native-binary/claude --output-format stream-json...)
+// et Claude.app (chemin /Applications/Claude.app/...).
+function findExistingClaudeSession() {
+  const r = spawnSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' });
+  const pids = (r.stdout || '').split('\n')
+    .map(line => {
+      const m = line.match(/^\s*(\d+)\s+(.+)$/);
+      if (!m) return null;
+      const pid = parseInt(m[1], 10);
+      const cmd = m[2].trim();
+      return cmd === 'claude' && pid !== process.pid ? pid : null;
+    })
+    .filter(Boolean);
+  return pids[0] || null;
+}
+
+// --- Réveil session : ouvre Terminal.app et lance `claude` dans MasterClaude ---
+async function wakeClaudeSession() {
+  await send('🚀 Réveil d\'une nouvelle session Claude…').catch(() => {});
+  // osascript : active Terminal puis exécute la commande dans une nouvelle fenêtre
+  const cmd = `cd ${ROOT} && claude`;
+  const script = `tell application "Terminal"
+  activate
+  do script "${cmd}"
+end tell`;
+  const r = spawnSync('osascript', ['-e', script], { encoding: 'utf8', timeout: 10000 });
+  if (r.status !== 0) {
+    process.stderr.write(`[wake] osascript échec (status=${r.status}): ${r.stderr}\n`);
+    await send('❌ Réveil échoué — autorise Terminal.app dans Réglages → Confidentialité → Automation, puis réessaie.').catch(() => {});
+    return false;
+  }
+  process.stdout.write('[wake] Terminal lancé, attente du signal file…\n');
+  // Le hook SessionStart écrit le signal file → polling 30s max
+  for (let i = 0; i < 60; i++) {
+    const sig = readSessionSignal();
+    if (sig.valid) {
+      process.stdout.write(`[wake] session active PID=${sig.claudePid}\n`);
+      return true;
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  process.stderr.write('[wake] timeout 30s — pas de signal file détecté\n');
+  await send('⚠️ Session Claude semble lancée mais le signal IPC n\'est pas arrivé. Vérifie le terminal.').catch(() => {});
+  return false;
+}
+
+// --- Restart : tue ancienne session puis réveille une nouvelle ---
+async function restartSession(oldPid, ctxPct) {
+  process.stdout.write(`[restart] ctx=${ctxPct}% — kill PID=${oldPid}\n`);
+  if (oldPid && isPidAlive(oldPid)) {
+    try { process.kill(oldPid, 'SIGTERM'); } catch (e) {
+      process.stderr.write(`[restart] SIGTERM raté: ${e.message}\n`);
+    }
+    // 10s de grâce pour finir proprement
+    for (let i = 0; i < 20; i++) {
+      if (!isPidAlive(oldPid)) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
+    if (isPidAlive(oldPid)) {
+      process.stdout.write(`[restart] grâce dépassée → SIGKILL\n`);
+      try { process.kill(oldPid, 'SIGKILL'); } catch {}
+    }
+  }
+  cleanupSignalFile();
+  // Ne pas annoncer la mort — la session recevra un nouveau réveil propre
+  return wakeClaudeSession();
+}
+
+// --- Single dispatch path : tout message Telegram passe par ici ---
+// Garanties : (1) jamais de subprocess fantôme, (2) auto-wake si pas de session,
+// (3) restart auto si ctx >= 60% APRÈS la réponse au tour courant.
+async function routeToClaude(userMsg, projectKey) {
+  // Étape 1 — assurer une session active. Trois cas :
+  //   (a) signal IPC valide → utiliser claudePid pour restart features
+  //   (b) signal stale MAIS un process `claude` tourne → écrire dans inbox quand même
+  //       (le Monitor tail -f de cette session lira et répondra ; pas de restart possible)
+  //   (c) aucun process claude → wake une nouvelle session
+  let sig = readSessionSignal();
+  let claudePid = null;
+  if (sig.valid) {
+    claudePid = sig.claudePid;
+  } else {
+    const existing = findExistingClaudeSession();
+    if (existing) {
+      claudePid = existing;
+      process.stdout.write(`[ipc] signal stale mais session ${claudePid} vivante — IPC direct\n`);
+    } else {
+      cleanupSignalFile();
+      process.stdout.write('[ipc] aucune session — auto-wake\n');
+      const woke = await wakeClaudeSession();
+      if (!woke) return '❌ Impossible de démarrer une session Claude. Vérifie Terminal.app et l\'autorisation Automation.';
+      sig = readSessionSignal();
+      if (!sig.valid) return '❌ Session lancée mais signal IPC absent. Réessaie dans quelques secondes.';
+      claudePid = sig.claudePid;
+    }
   }
 
+  // Étape 2 — détecter saturation contexte (restart APRÈS la réponse, pas pendant)
+  const ctxPct = getCtxPct();
+  let pendingRestart = false;
+  if (ctxPct >= CTX_RESTART_THRESHOLD) {
+    pendingRestart = true;
+    await send(`🔄 Contexte ${ctxPct}% (≥ ${CTX_RESTART_THRESHOLD}%) — je relance Claude juste après cette réponse.`).catch(() => {});
+  }
+
+  // Étape 3 — dispatch via IPC (fichier inbox + polling response file)
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const responseFile = join(RESPONSE_DIR, `${id}.txt`);
   const entry = JSON.stringify({ id, ts: Date.now(), user: userMsg, project: projectKey });
@@ -282,11 +448,9 @@ async function askRealClaude(userMsg, projectKey) {
   try {
     _wfs(INBOX_FILE, entry + '\n', { flag: 'a' });
   } catch (e) {
-    process.stderr.write(`[ipc] erreur write inbox: ${e.message}\n`);
-    return askClaude(userMsg, projectKey);
+    return `❌ Erreur écriture inbox : ${e.message}`;
   }
-
-  process.stdout.write(`[ipc] msg→THIS session (id=${id})\n`);
+  process.stdout.write(`[ipc] msg→Claude PID=${claudePid} (id=${id})\n`);
 
   const ackTimer = setTimeout(async () => {
     await send('⚙️ Je traite…').catch(() => {});
@@ -297,22 +461,46 @@ async function askRealClaude(userMsg, projectKey) {
     await send(`⏳ Toujours en cours… (${heartbeatCount * 60}s)`).catch(() => {});
   }, 60000);
 
-  return new Promise((resolve) => {
+  // Étape 4 — attendre la réponse (pas de timeout dur — le user accepte d'attendre)
+  // Garde-fous : (a) cap 10 min ultime, (b) abandon si la session meurt en route
+  const response = await new Promise((resolve) => {
     const start = Date.now();
     const poll = setInterval(() => {
       if (_exists(responseFile)) {
         clearTimeout(ackTimer); clearInterval(heartbeat); clearInterval(poll);
-        const response = _rfs(responseFile, 'utf8').trim();
+        const content = _rfs(responseFile, 'utf8').trim();
+        // Marker .done : empêche le hook session-ipc-bridge de re-traiter ce message
+        // au réveil d'une nouvelle session (les .txt sont consommés ici, mais le marker reste).
+        try { _wfs(`${responseFile}.done`, ''); } catch {}
         try { _unlink(responseFile); } catch {}
-        resolve(response || '(vide)');
-      } else if (Date.now() - start > 300000) {
-        // 5min sans réponse → fallback subprocess
+        resolve(content || '(vide)');
+        return;
+      }
+      // Détection session morte pendant le traitement
+      if (claudePid && !isPidAlive(claudePid)) {
         clearTimeout(ackTimer); clearInterval(heartbeat); clearInterval(poll);
-        process.stdout.write(`[ipc] timeout 5min — fallback subprocess (id=${id})\n`);
-        askClaude(userMsg, projectKey).then(resolve);
+        cleanupSignalFile();
+        resolve('💀 Session Claude morte pendant le traitement. Renvoie ton message — je relancerai automatiquement.');
+        return;
+      }
+      // Cap dur 10 min (session vivante mais figée)
+      if (Date.now() - start > 600000) {
+        clearTimeout(ackTimer); clearInterval(heartbeat); clearInterval(poll);
+        resolve('⏱ Pas de réponse après 10 min. La session est peut-être figée — tape `/health` pour vérifier.');
       }
     }, 500);
   });
+
+  // Étape 5 — restart différé après livraison de la réponse au user
+  if (pendingRestart) {
+    setImmediate(() => {
+      restartSession(claudePid, ctxPct).catch(e =>
+        process.stderr.write(`[restart] erreur: ${e.message}\n`)
+      );
+    });
+  }
+
+  return response;
 }
 
 // --- Spawn session Claude sur un projet — outils complets, zéro confirmation ---
@@ -357,6 +545,7 @@ Ensuite, run le trigger immédiatement. Ne génère aucune réponse conversation
 // --- Commandes système ---
 const HELP = `Commandes Master :
 /status — état du daemon
+/health — diagnostic complet (IPC, transcribe, signal TTL)
 /projets — liste des projets
 /projet <nom|chemin> — activer un projet
 /projet off — revenir en mode global
@@ -368,6 +557,32 @@ const HELP = `Commandes Master :
 function handleSystemCommand(text) {
   if (text === '/start' || text === '/help') return HELP;
   if (text === '/status') return `✅ Master actif — PID ${process.pid}\nVault : ${VAULT_PATH}`;
+  if (text === '/health') {
+    const lines = [`🩺 Health — PID ${process.pid}`, `Uptime : ${Math.round(process.uptime())}s`];
+    // Signal file IPC + ctx%
+    const sigInfo = readSessionSignal();
+    if (sigInfo.valid) {
+      lines.push(`IPC session : 🟢 active (PID=${sigInfo.claudePid}, ${sigInfo.ageS}s)`);
+    } else if (sigInfo.claudePid) {
+      lines.push(`IPC session : ⚠️ invalide (PID=${sigInfo.claudePid} mort ou signal périmé ${sigInfo.ageS || '?'}s)`);
+    } else {
+      lines.push('IPC session : ⬛ absente → auto-wake au prochain message');
+    }
+    const ctxPct = getCtxPct();
+    if (ctxPct > 0) {
+      const tag = ctxPct >= 60 ? '🚨' : ctxPct >= 50 ? '🔥' : ctxPct >= 35 ? '🟡' : '✅';
+      lines.push(`Contexte session : ${ctxPct}% ${tag} (restart auto à ${CTX_RESTART_THRESHOLD}%)`);
+    }
+    // Transcribe socket
+    lines.push(`Transcribe : ${_exists(TRANSCRIBE_SOCK) ? '🟢 socket ok' : '⬛ inactif'}`);
+    // Inbox
+    try {
+      const stat = _stat(INBOX_FILE);
+      lines.push(`Inbox : ${stat.size} octets`);
+    } catch { lines.push('Inbox : absente'); }
+    lines.push(`Projet actif : ${sessions.active?.name || 'global'}`);
+    return lines.join('\n');
+  }
   if (text === '/reset') {
     const key = sessions.active?.name || 'global';
     ctx.reset(key);
@@ -384,16 +599,22 @@ function saveOffset(v) { try { _wfs(OFFSET_FILE, `${v}\n`); } catch {} }
 
 let running = true;
 
+function cleanupSignalFile() {
+  try { _unlink(REAL_CLAUDE_ACTIVE_FILE); } catch {}
+}
+
 process.on('SIGTERM', async () => {
   running = false;
+  cleanupSignalFile();
   process.stdout.write('[master] SIGTERM\n');
   await send('🔴 Master hors ligne').catch(() => {});
   process.exit(0);
 });
 
-process.on('SIGINT', () => { running = false; process.exit(0); });
+process.on('SIGINT', () => { running = false; cleanupSignalFile(); process.exit(0); });
 
 process.stdout.write(`[master] démarré PID=${process.pid} vault=${VAULT_PATH}\n`);
+ensureTranscribeDaemon();
 
 await send('🟢 Master Claude Atelier en ligne\nTape /help pour les commandes.').catch(e => {
   process.stderr.write(`[master] warn: ${e.message}\n`);
@@ -415,8 +636,36 @@ while (running) {
       saveOffset(offset);
 
       const msg = upd.message;
-      if (!msg?.text) continue;
+      if (!msg) continue;
       if (String(msg.chat.id) !== CHAT_ID) continue;
+
+      // Message vocal → transcription via daemon Whisper
+      if (msg.voice || msg.audio) {
+        const fileId = (msg.voice || msg.audio).file_id;
+        let audioPath;
+        try {
+          await send('🎙️ Transcription en cours…').catch(() => {});
+          audioPath = await downloadVoice(fileId);
+          ensureTranscribeDaemon();
+          // Attendre que le socket soit prêt (max 5s)
+          for (let i = 0; i < 10; i++) {
+            if (_exists(TRANSCRIBE_SOCK)) break;
+            await new Promise(r => setTimeout(r, 500));
+          }
+          const transcript = await transcribeAudio(audioPath);
+          try { unlinkSync(audioPath); } catch {}
+          // Réinjecter comme texte dans le flux normal
+          msg.text = transcript;
+          process.stdout.write(`[voice] transcrit: ${transcript.slice(0, 80)}\n`);
+        } catch (e) {
+          process.stderr.write(`[voice] erreur: ${e.message}\n`);
+          await send(`❌ Transcription échouée : ${e.message}`).catch(() => {});
+          if (audioPath) try { unlinkSync(audioPath); } catch {}
+          continue;
+        }
+      }
+
+      if (!msg?.text) continue;
 
       const text = msg.text.trim();
       process.stdout.write(`[master] reçu: ${text}\n`);
@@ -461,10 +710,10 @@ while (running) {
         continue;
       }
 
-      // Message → Claude (session persistante via --continue)
+      // Message → Claude (single path : IPC vers session active, auto-wake si absente)
       const projectKey = sessions.active?.name || 'global';
       try {
-        const reply = await askRealClaude(text, projectKey);
+        const reply = await routeToClaude(text, projectKey);
         if (reply) {
           await send(reply).catch(e =>
             process.stderr.write(`[master] erreur send: ${e.message}\n`)

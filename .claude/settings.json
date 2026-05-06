@@ -7,38 +7,66 @@
     "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1"
   },
   "permissions": {
-    "defaultMode": "acceptEdits",
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Read",
       "Glob",
       "Grep",
       "Edit",
       "Write",
-      "Bash(npm run *)",
-      "Bash(npm test *)",
-      "Bash(npm ci *)",
-      "Bash(npm version *)",
-      "Bash(npm view *)",
-      "Bash(npm run lint*)",
-      "Bash(pnpm run *)",
-      "Bash(pnpm test *)",
-      "Bash(git add *)",
-      "Bash(git commit *)",
-      "Bash(git diff *)",
-      "Bash(git status*)",
-      "Bash(git log *)",
-      "Bash(git push*)",
-      "Bash(git push --tags*)",
-      "Bash(git tag *)",
-      "Bash(gh run *)",
-      "Bash(gh pr *)",
+      "Monitor",
+      "TaskCreate",
+      "TaskUpdate",
+      "TaskList",
+      "TaskGet",
+      "TaskStop",
+      "Bash(npm *)",
+      "Bash(pnpm *)",
+      "Bash(node *)",
+      "Bash(python3 *)",
+      "Bash(python *)",
+      "Bash(bash *)",
+      "Bash(sh *)",
+      "Bash(git *)",
+      "Bash(gh *)",
       "Bash(ls *)",
-      "Bash(cat /tmp/masterclaude*)",
+      "Bash(cat *)",
+      "Bash(tail *)",
+      "Bash(head *)",
+      "Bash(grep *)",
+      "Bash(awk *)",
+      "Bash(sed *)",
+      "Bash(stat *)",
+      "Bash(find *)",
+      "Bash(touch *)",
+      "Bash(mv *)",
+      "Bash(cp *)",
+      "Bash(mkdir *)",
+      "Bash(rm *.txt)",
+      "Bash(rm *.done)",
+      "Bash(rm /tmp/tg-*)",
+      "Bash(rm /tmp/masterclaude-*)",
+      "Bash(rm -f /tmp/tg-*)",
+      "Bash(rm -f /tmp/masterclaude-*)",
       "Bash(chmod *)",
-      "Bash(python scripts/switch_model.py*)",
-      "Bash(python3 scripts/switch_model.py*)",
-      "Edit(.claude/settings.json)",
-      "Write(.claude/settings.json)"
+      "Bash(echo *)",
+      "Bash(printf *)",
+      "Bash(date *)",
+      "Bash(pgrep *)",
+      "Bash(pkill *)",
+      "Bash(ps *)",
+      "Bash(kill *)",
+      "Bash(kill -9 *)",
+      "Bash(kill -TERM *)",
+      "Bash(lsof *)",
+      "Bash(nohup *)",
+      "Bash(curl -s *)",
+      "Bash(jq *)",
+      "Bash(test *)",
+      "Bash(\\[ *)",
+      "Bash(if *)",
+      "Bash(for *)",
+      "Bash(while *)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
@@ -101,6 +129,10 @@
           {
             "type": "command",
             "command": "bash \"hooks/detect-design-need.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"$(date +%s):$$:$PPID\" > /tmp/masterclaude-real-claude-active'"
           }
         ]
       }
@@ -132,6 +164,17 @@
             "type": "command",
             "command": "bash \"hooks/guard-tests-before-push.sh\"",
             "if": "Bash(*git push*)"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"hooks/guard-header-check.sh\""
           }
         ]
       }

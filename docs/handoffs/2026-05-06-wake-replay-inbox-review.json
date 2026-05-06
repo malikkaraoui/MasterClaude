@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "subject": "Intégration review Copilot — IPC Telegram wake-replay-inbox",
+    "date": "2026-05-06",
+    "type": "integration",
+    "priority": "haute",
+    "reviewedRange": "3754c6f..f5a48fb"
+  },
+  "from": {
+    "model": "claude-opus-4-7",
+    "context": "Intégration de la review Copilot sur la PR #1 (handoff/2026-05-06-wake-replay-inbox). Copilot a généré 2 commentaires inline sur le commit 6717fac4. CI initialement rouge (drift sha model-metrics dans manifest, corrigé en f5a48fb). Cette session intègre les remarques pertinentes et documente les arbitrages.",
+    "question": "Les commentaires Copilot pointent (1) une incohérence stdout/stderr dans guard-header-check.sh vs sa déclaration manifest, et (2) une allow list trop large en mode bypassPermissions exposant rm/kill/curl à du prompt-injection. Quelle correction est défendable sans casser l'autonomie demandée explicitement par l'utilisateur ?",
+    "filesToRead": [
+      "hooks/guard-header-check.sh",
+      ".claude/settings.json",
+      ".claude/hooks-manifest.json",
+      "bin/master.js"
+    ],
+    "constraints": [
+      "Respecter la décision utilisateur d'élargir les permissions (\"pour la vie\")",
+      "Aligner l'implémentation avec les déclarations du manifest",
+      "Réduire la surface d'attaque sans bloquer l'autonomie"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "Review Copilot — 2 commentaires inline + body PR.\n\n1) hooks/guard-header-check.sh ligne 105 — Le manifest annonce 'warning stderr si entête absent ou malformé' mais le hook utilise `print(...)` Python (stdout par défaut) et `echo` final aussi sur stdout. Pollution potentielle de stdout si l'orchestrateur s'attend à du JSON pur, et divergence avec la doc. Fix proposé : `print(..., file=sys.stderr)` côté Python + `echo ... >&2` côté bash.\n\n2) .claude/settings.json ligne 61 — `defaultMode: bypassPermissions` combiné avec une allow list contenant `Bash(rm /tmp/*)`, `Bash(rm -f /tmp/*)`, `Bash(kill -9 *)`, `Bash(git *)`, `Bash(curl -s *)` expose à du prompt-injection : suppression fichiers temporaires critiques, kill de processes arbitraires, exfiltration via curl. Fix proposé : revenir à un mode non-bypass OU restreindre rm/kill/curl à des patterns stricts nécessaires.\n\nBody PR : Copilot reconnaît les 3 axes (anti re-spawn + replay orphans + markers) et signale la portée additionnelle (transcribe-daemon Whisper, élargissement permissions, Stop hook). 8 fichiers / 9 reviewés, 2 commentaires générés.",
+    "_instruction": "Champ rempli par Claude après lecture des commentaires GitHub Copilot."
+  },
+  "integration": {
+    "retained_implement": [
+      "FIX guard-header-check.sh : redirection des warnings vers stderr (print file=sys.stderr côté Python, echo >&2 côté bash). Manifeste resynchronisé (sha 65546a5366f77daf → 8c04c10a41896369).",
+      "FIX settings.json : tightener `Bash(rm /tmp/*)` et `Bash(rm -f /tmp/*)` en patterns ciblés `Bash(rm /tmp/tg-*)` + `Bash(rm /tmp/masterclaude-*)` (idem -f). Couvre le besoin réel sans exposer /tmp entier."
+    ],
+    "rejected": [
+      "Revert défaultMode bypassPermissions → utilisateur a explicitement demandé l'autonomie (cf. message 'modifie tes permissions et profite s'en pour la vie' du 2026-05-06 14:38). Décision documentée et assumée.",
+      "Restreindre `Bash(kill -9 *)` et `Bash(git *)` → nécessaires pour gérer master.js (kill PID) et le workflow git (commits/push/PR). Le deny list bloque déjà `git push --force`, `git reset --hard`, `git filter-branch`, `git filter-repo`, `rm -rf:*`, `sudo:*`, pipe-to-shell.",
+      "Restreindre `Bash(curl -s *)` → utile pour healthchecks API (Telegram, GitHub). Le risque d'exfiltration est mitigé par l'absence de secrets en variables d'environnement enfants (`delete process.env.ANTHROPIC_API_KEY` dans master.js avant chaque spawn)."
+    ],
+    "verdict": "VALIDÉ avec correctifs ciblés (commit f5a48fb pour CI + ce commit pour les remarques Copilot). Les 2 commentaires sont traités. La surface d'attaque résiduelle (curl/git/kill larges) est acceptée comme contrepartie de l'autonomie utilisateur, avec deny list pour les opérations destructives. Fix appliqué : guard-header-check.sh (stderr) + settings.json (rm /tmp/* tightened en /tmp/tg-* et /tmp/masterclaude-*). PR #1 prête à merger après CI verte."
+  }
+}

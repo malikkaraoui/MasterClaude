@@ -621,5 +621,6 @@ _HDR_PROXY=$(is_ollama_proxy_healthy && echo "🔌✅" || echo "🔌❌")
 echo ""
 echo "⚡⚡⚡ §1 ENTÊTE OBLIGATOIRE ⚡⚡⚡"
 echo "Ta réponse DOIT commencer par (1ère ligne, exactement) :"
-echo "\`[$_HDR_TS | $_HDR_MODEL] PASTILLE $_HDR_MODE${_HDR_OLLAMA_PART} | $_HDR_PROXY\`"
+echo "\`[$_HDR_TS | $_HDR_MODEL] PASTILLE $_HDR_MODE${_HDR_OLLAMA_PART} | $_HDR_PROXY | CTX\`"
 echo "PASTILLE = pastille issue de [METRICS] (⬆️ / ⬇️ / 🟢) — 🟢 si [METRICS] absent"
+echo "CTX = fenêtre de contexte issue de [CTX] (ex: 23%✅ si <50%, 67%🔥 si ≥50%) — omettre ENTIÈREMENT si [CTX] absent ou valeur = 0"

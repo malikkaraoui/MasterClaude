@@ -90,7 +90,7 @@
       "exitCodes": {
         "0": "always (injection only, never blocks)"
       },
-      "sha256": "56e63378013a6a7f"
+      "sha256": "e0af9f3df7f72e18"
     },
     {
       "name": "guard-no-sign",
@@ -172,6 +172,25 @@
       "sha256": "61830ca0a3479e1b"
     },
     {
+      "name": "guard-header-check",
+      "file": "hooks/guard-header-check.sh",
+      "type": "Stop",
+      "trigger": "session.stop",
+      "purpose": "Vérifie l'intégrité de l'entête §1 de la dernière réponse Claude (présence, format, tolérance ±5% sur token %)",
+      "inputs": [
+        "transcript_path (from Stop hook JSON stdin)"
+      ],
+      "outputs": [
+        "warning stderr si entête absent ou malformé"
+      ],
+      "rule": "§1 Horodatage + Modèle",
+      "test": null,
+      "exitCodes": {
+        "0": "always (warning only, never blocks)"
+      },
+      "sha256": "8c04c10a41896369"
+    },
+    {
       "name": "guard-tests-before-push",
       "file": "hooks/guard-tests-before-push.sh",
       "type": "PreToolUse + PostToolUse",
@@ -250,7 +269,7 @@
       "exitCodes": {
         "0": "always (warning only, never blocks)"
       },
-      "sha256": "f58d9b4a49f2c40f"
+      "sha256": "3b2e01067b438e47"
     },
     {
       "name": "guard-hooks-reload",
@@ -349,7 +368,7 @@
       "exitCodes": {
         "0": "always (setup only, never blocks)"
       },
-      "sha256": "ecf269b9a8a80e73"
+      "sha256": "1a8476dc78b1133d"
     },
     {
       "name": "peter-inbox-check",
@@ -372,18 +391,18 @@
     }
   ],
   "stats": {
-    "total": 18,
+    "total": 19,
     "byType": {
       "helper": 1,
       "SessionStart": 4,
-      "Stop": 1,
+      "Stop": 2,
       "UserPromptSubmit": 3,
       "PreToolUse": 3,
       "PostToolUse": 4,
       "PreToolUse + PostToolUse": 1
     },
     "blocking": 3,
-    "warningOnly": 12,
+    "warningOnly": 13,
     "withTests": 5
   },
   "conventions": {
