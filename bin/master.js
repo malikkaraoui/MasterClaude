@@ -12,7 +12,7 @@ import { readFileSync, existsSync, createWriteStream, unlinkSync } from 'node:fs
 import { spawn, spawnSync } from 'node:child_process';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir } from 'node:fs';
+import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir, statSync as _stat } from 'node:fs';
 import { loadVaultBrief } from '../src/master/vault-loader.js';
 
 // Transcription daemon (TRANSCRIBE_SCRIPT défini après __dirname, ligne ~27)
@@ -332,6 +332,18 @@ async function askRealClaude(userMsg, projectKey) {
   if (!_exists(REAL_CLAUDE_ACTIVE_FILE)) {
     return askClaude(userMsg, projectKey);
   }
+  // Valider TTL : signal file = "timestamp:PID" → périmé si > 10 min
+  try {
+    const sig = _rfs(REAL_CLAUDE_ACTIVE_FILE, 'utf8').trim();
+    const ts = parseInt(sig.split(':')[0], 10);
+    if (!ts || (Date.now() / 1000 - ts) > 600) {
+      process.stdout.write(`[ipc] signal périmé (${Math.round(Date.now() / 1000 - ts)}s > 600s) — fallback subprocess\n`);
+      return askClaude(userMsg, projectKey);
+    }
+  } catch {
+    process.stdout.write('[ipc] signal illisible — fallback subprocess\n');
+    return askClaude(userMsg, projectKey);
+  }
 
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const responseFile = join(RESPONSE_DIR, `${id}.txt`);
@@ -363,10 +375,10 @@ async function askRealClaude(userMsg, projectKey) {
         const response = _rfs(responseFile, 'utf8').trim();
         try { _unlink(responseFile); } catch {}
         resolve(response || '(vide)');
-      } else if (Date.now() - start > 300000) {
-        // 5min sans réponse → fallback subprocess
+      } else if (Date.now() - start > 45000) {
+        // 45s sans réponse → fallback subprocess
         clearTimeout(ackTimer); clearInterval(heartbeat); clearInterval(poll);
-        process.stdout.write(`[ipc] timeout 5min — fallback subprocess (id=${id})\n`);
+        process.stdout.write(`[ipc] timeout 45s — fallback subprocess (id=${id})\n`);
         askClaude(userMsg, projectKey).then(resolve);
       }
     }, 500);
@@ -415,6 +427,7 @@ Ensuite, run le trigger immédiatement. Ne génère aucune réponse conversation
 // --- Commandes système ---
 const HELP = `Commandes Master :
 /status — état du daemon
+/health — diagnostic complet (IPC, transcribe, signal TTL)
 /projets — liste des projets
 /projet <nom|chemin> — activer un projet
 /projet off — revenir en mode global
@@ -426,6 +439,31 @@ const HELP = `Commandes Master :
 function handleSystemCommand(text) {
   if (text === '/start' || text === '/help') return HELP;
   if (text === '/status') return `✅ Master actif — PID ${process.pid}\nVault : ${VAULT_PATH}`;
+  if (text === '/health') {
+    const lines = [`🩺 Health — PID ${process.pid}`, `Uptime : ${Math.round(process.uptime())}s`];
+    // Signal file IPC
+    if (_exists(REAL_CLAUDE_ACTIVE_FILE)) {
+      try {
+        const sig = _rfs(REAL_CLAUDE_ACTIVE_FILE, 'utf8').trim();
+        const ts = parseInt(sig.split(':')[0], 10);
+        const pid = sig.split(':')[1] || '?';
+        const age = Math.round(Date.now() / 1000 - ts);
+        const stale = age > 600;
+        lines.push(`IPC session : ${stale ? '⚠️ périmée' : '🟢 active'} (PID=${pid}, ${age}s)`);
+      } catch { lines.push('IPC signal : ⚠️ illisible'); }
+    } else {
+      lines.push('IPC session : ⬛ absente → fallback subprocess');
+    }
+    // Transcribe socket
+    lines.push(`Transcribe : ${_exists(TRANSCRIBE_SOCK) ? '🟢 socket ok' : '⬛ inactif'}`);
+    // Inbox
+    try {
+      const stat = _stat(INBOX_FILE);
+      lines.push(`Inbox : ${stat.size} octets`);
+    } catch { lines.push('Inbox : absente'); }
+    lines.push(`Projet actif : ${sessions.active?.name || 'global'}`);
+    return lines.join('\n');
+  }
   if (text === '/reset') {
     const key = sessions.active?.name || 'global';
     ctx.reset(key);
@@ -442,14 +480,19 @@ function saveOffset(v) { try { _wfs(OFFSET_FILE, `${v}\n`); } catch {} }
 
 let running = true;
 
+function cleanupSignalFile() {
+  try { _unlink(REAL_CLAUDE_ACTIVE_FILE); } catch {}
+}
+
 process.on('SIGTERM', async () => {
   running = false;
+  cleanupSignalFile();
   process.stdout.write('[master] SIGTERM\n');
   await send('🔴 Master hors ligne').catch(() => {});
   process.exit(0);
 });
 
-process.on('SIGINT', () => { running = false; process.exit(0); });
+process.on('SIGINT', () => { running = false; cleanupSignalFile(); process.exit(0); });
 
 process.stdout.write(`[master] démarré PID=${process.pid} vault=${VAULT_PATH}\n`);
 ensureTranscribeDaemon();
