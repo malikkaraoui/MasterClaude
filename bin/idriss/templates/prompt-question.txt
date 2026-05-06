@@ -1,0 +1,18 @@
+Voici un résumé brut de ma journée (notes Obsidian, sessions Claude, commits git).
+
+Réponds à ces 3 questions, en français, sans flatterie, sans préambule, sans répétition du résumé. Format : 3 sections Markdown courtes, brutales, actionnables.
+
+## 1. Conviction
+Quelle conviction retiens-tu de cette journée ?
+
+## 2. Red-flag
+Quel red-flag vois-tu (incohérence, dette qui grossit, idée abandonnée sans raison) ?
+
+## 3. Expérience demain
+Quelle expérience tenter demain ?
+
+---
+
+Résumé brut :
+
+{summary}

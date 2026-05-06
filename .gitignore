@@ -87,3 +87,13 @@ vault/.peter/
 
 # Git worktrees isolés
 .worktrees/
+
+# Python venv partagé Idriss/Léonor
+bin/.shared-venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Idriss/Léonor logs runtime (par projet, pas versionnés)
+logs/
+

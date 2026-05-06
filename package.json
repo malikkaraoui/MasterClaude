@@ -73,8 +73,9 @@
     "test:pulse": "node test/pulse.js",
     "test:vault": "node test/vault.js",
     "test:vault-update": "node test/vault-update.js",
-    "test": "npm run lint && npm run doctor && npm run test:hooks && npm run test:merge && npm run test:apply-profile && npm run test:pulse && npm run test:vault && npm run test:vault-update && npm run test:telegram",
-    "test:telegram": "node test/telegram.test.js"
+    "test": "npm run lint && npm run doctor && npm run test:hooks && npm run test:merge && npm run test:apply-profile && npm run test:pulse && npm run test:vault && npm run test:vault-update && npm run test:telegram && npm run test:idriss",
+    "test:telegram": "node test/telegram.test.js",
+    "test:idriss": "bash scripts/run-pytest.sh test/idriss/ -q"
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0"
