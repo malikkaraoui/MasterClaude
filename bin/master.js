@@ -353,8 +353,8 @@ async function askRealClaude(userMsg, projectKey) {
   try {
     const sig = _rfs(REAL_CLAUDE_ACTIVE_FILE, 'utf8').trim();
     const ts = parseInt(sig.split(':')[0], 10);
-    if (!ts || (Date.now() / 1000 - ts) > 7200) {
-      process.stdout.write(`[ipc] signal périmé (${Math.round(Date.now() / 1000 - ts)}s > 7200s) — fallback\n`);
+    if (!ts || (Date.now() / 1000 - ts) > 600) {
+      process.stdout.write(`[ipc] signal périmé (${Math.round(Date.now() / 1000 - ts)}s > 600s) — fallback\n`);
       return askClaude(userMsg, projectKey);
     }
   } catch {
@@ -392,10 +392,10 @@ async function askRealClaude(userMsg, projectKey) {
         const response = _rfs(responseFile, 'utf8').trim();
         try { _unlink(responseFile); } catch {}
         resolve(response || '(vide)');
-      } else if (Date.now() - start > 3000) {
-        // 3s sans réponse → fallback subprocess (IPC fail-fast)
+      } else if (Date.now() - start > 45000) {
+        // 45s sans réponse → fallback subprocess
         clearTimeout(ackTimer); clearInterval(heartbeat); clearInterval(poll);
-        process.stdout.write(`[ipc] timeout 3s — fallback (msg=${userMsg.length}chars)\n`);
+        process.stdout.write(`[ipc] timeout 45s — fallback subprocess (id=${id})\n`);
         askClaude(userMsg, projectKey).then(resolve);
       }
     }, 500);
