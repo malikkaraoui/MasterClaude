@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parachute Dashboard</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Menlo', 'Consolas', monospace; margin: 0; padding: 20px; background: #0f0f0f; color: #d4d4d4; }
+    h1 { color: #4ec9b0; margin: 0 0 4px; font-size: 1.4em; }
+    .subtitle { color: #555; font-size: 0.8em; margin-bottom: 24px; }
+    h2 { color: #9cdcfe; font-size: 1em; margin: 24px 0 8px; border-bottom: 1px solid #222; padding-bottom: 4px; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.85em; }
+    th, td { padding: 5px 10px; border: 1px solid #1e1e1e; text-align: left; }
+    th { background: #1a1a1a; color: #888; font-weight: normal; }
+    tr:nth-child(even) { background: #111; }
+    .up { color: #4ec9b0; }
+    .down { color: #f44747; }
+    .none { color: #555; font-style: italic; }
+    #alerts-box { max-height: 220px; overflow-y: auto; background: #0a0a0a; padding: 10px; border: 1px solid #1e1e1e; font-size: 0.82em; line-height: 1.6; }
+    .alert-line { color: #ce9178; }
+    .ts { color: #555; font-size: 0.75em; float: right; }
+    .badge { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 0.75em; }
+    .badge-ok { background: #1a3a1a; color: #4ec9b0; }
+    .badge-err { background: #3a1a1a; color: #f44747; }
+  </style>
+</head>
+<body>
+  <h1>🪂 Parachute</h1>
+  <div class="subtitle">
+    <span id="version">–</span> &nbsp;·&nbsp;
+    uptime <span id="uptime">–</span> &nbsp;·&nbsp;
+    <span class="ts" id="refreshed">–</span>
+  </div>
+
+  <h2>Sessions actives</h2>
+  <div id="sessions"><span class="none">Chargement…</span></div>
+
+  <h2>Handoffs disponibles</h2>
+  <div id="handoffs"><span class="none">Chargement…</span></div>
+
+  <h2>Alertes récentes</h2>
+  <div id="alerts-box"><span class="none">Chargement…</span></div>
+
+  <script>
+    const token = (document.cookie.match(/parachute_token=([^;]+)/) || [])[1] || '';
+    const hdrs = token ? { 'Authorization': 'Bearer ' + token } : {};
+
+    function fmt(iso) {
+      const d = new Date(iso);
+      return isNaN(d) ? iso : d.toLocaleString('fr-FR');
+    }
+    function fmtTs(ts) {
+      return new Date(ts * 1000).toLocaleTimeString('fr-FR');
+    }
+    function elapsed(sec) {
+      if (sec < 120) return sec + 's';
+      if (sec < 7200) return Math.round(sec / 60) + 'm';
+      return Math.round(sec / 3600) + 'h';
+    }
+
+    async function refresh() {
+      document.getElementById('refreshed').textContent = 'màj ' + new Date().toLocaleTimeString('fr-FR');
+
+      // Health
+      try {
+        const d = await fetch('/health', { headers: hdrs }).then(r => r.json());
+        document.getElementById('version').textContent = 'v' + (d.version || '?');
+        document.getElementById('uptime').textContent = elapsed(d.uptime_sec || 0);
+      } catch {}
+
+      // Sessions
+      try {
+        const d = await fetch('/v1/sessions', { headers: hdrs }).then(r => r.json());
+        const ss = d.sessions || [];
+        if (!ss.length) {
+          document.getElementById('sessions').innerHTML = '<span class="none">Aucune session active</span>';
+        } else {
+          let h = '<table><tr><th>Projet</th><th>Cwd</th><th>PID</th><th>Démarré</th><th>Dernier heartbeat</th></tr>';
+          for (const s of ss) {
+            h += `<tr><td><b>${s.ProjectKey}</b></td><td>${s.Cwd}</td><td>${s.Pid}</td><td>${fmt(s.StartedAt)}</td><td>${fmt(s.LastHeartbeat)}</td></tr>`;
+          }
+          document.getElementById('sessions').innerHTML = h + '</table>';
+        }
+      } catch (e) {
+        document.getElementById('sessions').innerHTML = '<span class="down">Erreur: ' + e + '</span>';
+      }
+
+      // Handoffs
+      try {
+        const d = await fetch('/v1/projects', { headers: hdrs }).then(r => r.json());
+        const ps = d.projects || [];
+        if (!ps.length) {
+          document.getElementById('handoffs').innerHTML = '<span class="none">Aucun handoff en attente</span>';
+        } else {
+          let h = '<table><tr><th>Projet</th><th>Raison</th><th>Prochaine action</th><th>Créé</th></tr>';
+          for (const key of ps) {
+            try {
+              const hd = await fetch('/v1/handoff/' + encodeURIComponent(key), { headers: hdrs }).then(r => r.json());
+              h += `<tr><td><b>${key}</b></td><td>${hd.reason||'–'}</td><td>${hd.next_action||hd.NextAction||'–'}</td><td>${fmt(hd.created_at||hd.CreatedAt)}</td></tr>`;
+            } catch { h += `<tr><td>${key}</td><td colspan="3"><span class="down">erreur</span></td></tr>`; }
+          }
+          document.getElementById('handoffs').innerHTML = h + '</table>';
+        }
+      } catch (e) {
+        document.getElementById('handoffs').innerHTML = '<span class="down">Erreur: ' + e + '</span>';
+      }
+
+      // Logs/Alerts
+      try {
+        const d = await fetch('/v1/logs', { headers: hdrs }).then(r => r.json());
+        const lines = (d.lines || []).slice(-30);
+        if (!lines.length) {
+          document.getElementById('alerts-box').innerHTML = '<span class="none">Aucune alerte</span>';
+        } else {
+          document.getElementById('alerts-box').innerHTML = lines.map(l =>
+            `<div class="alert-line">[${fmtTs(l.ts)}] <b>${l.component}</b>: ${l.message}</div>`
+          ).join('');
+        }
+      } catch (e) {
+        document.getElementById('alerts-box').innerHTML = '<span class="down">Erreur: ' + e + '</span>';
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 30000);
+  </script>
+</body>
+</html>

@@ -16,17 +16,22 @@
 package server
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/malikkaraoui/MasterClaude/parachute/internal/dashboard"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/sessions"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/store"
 )
+
+const alertsFile = "/tmp/parachute-alerts.jsonl"
 
 const Version = "0.2.0"
 
@@ -109,6 +114,10 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /health", s.handleHealth)
+	dh := dashboard.Handler()
+	s.mux.HandleFunc("GET /dashboard", s.guard(dh.ServeHTTP))
+	s.mux.HandleFunc("GET /dashboard/", s.guard(dh.ServeHTTP))
+	s.mux.HandleFunc("GET /v1/logs", s.guard(s.handleLogs))
 	s.mux.HandleFunc("GET /v1/projects", s.guard(s.handleListProjects))
 	s.mux.HandleFunc("GET /v1/handoff/{projectKey}", s.guard(s.handleGetHandoff))
 	s.mux.HandleFunc("POST /v1/handoff/{projectKey}", s.guard(s.handlePutHandoff))
@@ -312,6 +321,35 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{"error": msg, "status": status})
+}
+
+// handleLogs retourne les dernières lignes du fichier d'alertes JSONL.
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	f, err := os.Open(alertsFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSON(w, http.StatusOK, map[string]any{"lines": []any{}})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "logs: "+err.Error())
+		return
+	}
+	defer f.Close()
+
+	type alertLine struct {
+		Ts        int64  `json:"ts"`
+		Component string `json:"component"`
+		Message   string `json:"message"`
+	}
+	var lines []alertLine
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		var l alertLine
+		if err := json.Unmarshal(sc.Bytes(), &l); err == nil {
+			lines = append(lines, l)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"lines": lines})
 }
 
 func validProjectKey(key string) bool {

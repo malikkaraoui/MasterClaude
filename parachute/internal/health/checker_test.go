@@ -3,6 +3,7 @@ package health_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/health"
@@ -70,10 +71,10 @@ func TestCheckHTTP_Recovery(t *testing.T) {
 	hasDown := false
 	hasUp := false
 	for _, a := range alerts {
-		if len(a) > 2 && a[:2] == "⚠" {
+		if strings.HasPrefix(a, "⚠") {
 			hasDown = true
 		}
-		if len(a) > 2 && a[:3] == "✅" {
+		if strings.HasPrefix(a, "✅") {
 			hasUp = true
 		}
 	}
