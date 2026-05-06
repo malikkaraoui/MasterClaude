@@ -40,8 +40,19 @@ Ce que Claude ou Peter apprend sur le projet et qui mérite de survivre à la se
 - **Réutilise le venv partagé Idriss** + le `setup_logging` + `ollama_client` d'Idriss (pas de duplication).
 - **Kill switch** : `touch /tmp/leonor-disabled`.
 
-### YYYY-MM-DD — Découverte
+### 2026-05-06 — Naissance de `parachute` (Go daemon orchestrateur)
 
-- Observation :
-- Impact :
-- Source :
+- **Décision d'architecture** : la pile actuelle (`master.js` Node + Python transcribe + 10+ hooks shell + fichiers `/tmp/*.json` pour IPC + Monitor tool conversationnel) est **trop fragile**. Un seul maillon casse → silence Telegram. Vu en live : `master.js` crashloop pendant test e2e migration ; `Monitor` tué par `/compact` (régression silencieuse).
+- **Action** : début d'un binaire Go unique `parachute/` qui absorbe progressivement les responsabilités. Étape 1 livrée : API HTTP `127.0.0.1:4001` pour persistance handoffs (POST/GET/CONSUME + archive auto + tests Go OK).
+- **Composants livrés en une session** : `parachute/cmd/parachute/main.go` (server) · `parachute/internal/{store,server}` · `bin/cc-parachute` (client shell) · LaunchAgent `com.masterclaude.parachute` (KeepAlive=true, RunAtLoad=true) · `parachute/scripts/install.sh` idempotent.
+- **Roadmap parachute** (2 → 7) : bridge Telegram natif, orchestration sessions, health pings, migration bipartite via WebSocket, SQLite quand >100 handoffs.
+- **Invariant** : tant que la nouvelle pile n'absorbe pas une responsabilité, l'ancienne reste en place. Pas de big-bang. Co-existence master.js ↔ parachute jusqu'à parité.
+
+### 2026-05-06 — Régression silencieuse Monitor post-`/compact`
+
+- **Observation** : le `Monitor` tool de Claude Code est lié à la conversation. `/compact` tue tous les Tasks de l'ancienne conv → bridge Telegram sourd silencieusement. Symptôme côté master : « Toujours en cours… » répété 60s/120s/180s, puis « Pas de réponse après 10 min ».
+- **Fix self-healing** : `hooks/guard-monitor-bridge.sh` sur `UserPromptSubmit`. À chaque message, `pgrep` le `tail -f /tmp/tg-inbox.jsonl`. Si absent → `additionalContext` bloquant qui force Claude à relancer Monitor avant de répondre. Self-healing — pas de patch ponctuel.
+- **Impact** : régression structurelle éliminée. Validé en live (le bridge a survécu un `/compact` après installation).
+- **Limite** : ne corrige pas la fragilité du master daemon ni le polling de la queue `/tmp/tg-responses/`. C'est l'objet de `parachute`.
+
+### YYYY-MM-DD — Découverte
