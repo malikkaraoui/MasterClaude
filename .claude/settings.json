@@ -36,7 +36,9 @@
       "Bash(cat /tmp/masterclaude*)",
       "Bash(chmod *)",
       "Bash(python scripts/switch_model.py*)",
-      "Bash(python3 scripts/switch_model.py*)"
+      "Bash(python3 scripts/switch_model.py*)",
+      "Edit(.claude/settings.json)",
+      "Write(.claude/settings.json)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
@@ -76,6 +78,10 @@
           {
             "type": "command",
             "command": "bash \"hooks/vault-context.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"hooks/session-ipc-bridge.sh\""
           }
         ]
       }
