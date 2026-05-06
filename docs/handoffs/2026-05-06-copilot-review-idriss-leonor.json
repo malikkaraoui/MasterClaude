@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "subject": "Intégration review Copilot PR #5 — Idriss + Léonor",
+    "date": "2026-05-06",
+    "type": "review",
+    "priority": "moyenne",
+    "reviewedRange": "1bf5cc1eafbbe82397747ea44448a71643b748ed..8b4f20642876881f68194bad474805473bc4e180"
+  },
+  "from": {
+    "model": "claude-opus-4-7",
+    "context": "Copilot a reviewé la PR #5 (Idriss + Léonor) et laissé 4 commentaires inline : 1 sur `scripts/run-pytest.sh` (skip silencieux des tests Python en CI = faux vert) et 3 sur `vault/plans/SPEC-idriss-leonor-curator.md` (incohérences entre la spec écrite avant impl et le code livré).",
+    "question": "Les 4 remarques de Copilot sont-elles correctement adressées et sans régression sur les tests Idriss/Léonor existants (52/52) ?",
+    "filesToRead": [
+      "scripts/run-pytest.sh",
+      "vault/plans/SPEC-idriss-leonor-curator.md",
+      "bin/idriss/run.py"
+    ],
+    "constraints": [
+      "Ne pas toucher la logique métier des agents (déjà testée)",
+      "Ne pas réécrire la spec — corriger ponctuellement les 3 incohérences pointées",
+      "Le fix `run-pytest.sh` doit fail en CI (CI=1 ou GITHUB_ACTIONS=true) mais skip toléré en local"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "Copilot (4 commentaires inline sur PR #5, commit 8b4f2064) :\n\n1. **scripts/run-pytest.sh:15 (CRITIQUE)** — Le wrapper `exit 0` quand venv/pytest absent permet à `npm test` de passer en vert tout en sautant silencieusement les tests Python. En CI, c'est un faux sentiment de couverture. Fix proposé : retourner non-zéro en CI (ou au minimum `CI=1` / `GITHUB_ACTIONS=1`), garder le skip seulement en local.\n\n2. **SPEC-idriss-leonor-curator.md:57** — La spec mentionne Qwen local via API HTTP `http://localhost:11434/api/generate`, alors que l'implémentation livrée utilise `ollama run` (CLI subprocess) pour cloud + local. Doc incohérente → diagnostic faussé.\n\n3. **SPEC-idriss-leonor-curator.md:70** — Le label « degraded mode: cloud-only » est inversé : quand Ollama Cloud est down, c'est Qwen *local* qui continue, donc le mode est « local-only ».\n\n4. **SPEC-idriss-leonor-curator.md:74** — La spec dit « Tout down → exit 1 » mais l'implé écrit un bilan fallback et retourne 0 (launchd ne retente pas un bilan partiel). Soit aligner spec sur code, soit aligner code sur spec.",
+    "_instruction": "Champ rempli automatiquement depuis les commentaires inline de la PR."
+  },
+  "integration": {
+    "retained_implement": "Les 4 remarques sont retenues et appliquées : (1) `scripts/run-pytest.sh` — ajout d'un garde CI qui exit 1 si `CI=1` ou `GITHUB_ACTIONS=true`, sinon skip toléré (mode local) ; (2) spec ligne 57 — formulation HTTP remplacée par mention explicite « subprocess CLI `ollama run <model>` — pas d'API HTTP custom » ; (3) spec ligne 70 — « cloud-only » corrigé en « local-only » pour le cas Ollama Cloud down + ajout symétrique « cloud-only » sur Qwen local down ; (4) spec ligne 74 — alignement sur le code livré : exit 0 + frontmatter `degraded` listant les pannes (le fichier journal sert d'audit, launchd ne retente pas).",
+    "rejected_keep": "Aucun rejet — tous les points Copilot sont valides et appliqués.",
+    "verdict": "Review intégrée intégralement. Aucune régression : la logique métier des agents Idriss/Léonor n'est pas touchée (52/52 tests pytest restent verts). Le fix CI sur `run-pytest.sh` durcit la suite sans casser le mode local. Les 3 corrections de spec restaurent la cohérence doc/code."
+  }
+}
