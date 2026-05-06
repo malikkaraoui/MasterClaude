@@ -93,6 +93,10 @@ func (h *Handler) handleMigrate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "project_key et cwd requis")
 		return
 	}
+	if !validProjectKey(req.ProjectKey) {
+		writeError(w, http.StatusBadRequest, "project_key invalide (a-zA-Z0-9_- requis, max 64 chars)")
+		return
+	}
 
 	// 1. Écrire le handoff en store (archive incluse).
 	if err := h.store.PutHandoff(req.ProjectKey, &req.Handoff); err != nil {
@@ -152,4 +156,21 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{"error": msg, "status": status})
+}
+
+// validProjectKey accepte uniquement a-zA-Z0-9_- (max 64 chars, pas de préfixe . ou -).
+func validProjectKey(key string) bool {
+	if key == "" || len(key) > 64 {
+		return false
+	}
+	for _, r := range key {
+		ok := (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '_' || r == '-'
+		if !ok {
+			return false
+		}
+	}
+	return key[0] != '.' && key[0] != '-'
 }
