@@ -21,6 +21,15 @@ import httpx
 from dotenv import load_dotenv
 from telegram import Update, Chat
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.request import HTTPXRequest
+
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+from telegram_network import (
+    TelegramFallbackTransport,
+    discover_fallback_ips,
+    parse_fallback_ip_env,
+)
 
 load_dotenv()
 
@@ -521,6 +530,7 @@ class TelegramBot:
         self.transcriber = VoiceTranscriber()
         self.polisher = OllamaPolisher()
         self.app: Optional[Application] = None
+        self._fallback_ips_cache: Optional[list[str]] = None
 
     async def _check_auth(self, user_id: int) -> bool:
         if ALLOWED_USERS and user_id not in ALLOWED_USERS:
@@ -798,7 +808,22 @@ class TelegramBot:
         if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
             raise ValueError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID required")
 
-        self.app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+        # IPs fallback : env override > DoH discovery > seed list
+        env_ips = parse_fallback_ip_env(os.getenv("TELEGRAM_FALLBACK_IPS"))
+        if env_ips:
+            self._fallback_ips_cache = env_ips
+            logger.info(f"Using TELEGRAM_FALLBACK_IPS from env: {env_ips}")
+        else:
+            try:
+                self._fallback_ips_cache = await discover_fallback_ips()
+                logger.info(f"Discovered Telegram fallback IPs: {self._fallback_ips_cache}")
+            except Exception as e:
+                logger.warning(f"DoH discovery failed: {e} — using seed list")
+                self._fallback_ips_cache = ["149.154.167.220"]
+
+        robust_transport = TelegramFallbackTransport(self._fallback_ips_cache)
+        request = HTTPXRequest(httpx_kwargs={"transport": robust_transport})
+        self.app = Application.builder().token(TELEGRAM_BOT_TOKEN).request(request).build()
 
         self.app.add_handler(CommandHandler("status", self.cmd_status))
         self.app.add_handler(CommandHandler("new", self.cmd_new))
