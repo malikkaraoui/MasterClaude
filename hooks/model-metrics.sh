@@ -158,6 +158,57 @@ if [ -n "$METRICS" ]; then
     echo "$METRICS"
 fi
 
+# Extraction % fenêtre de contexte (input_tokens du dernier tour / 200K)
+CTX_INDICATOR=""
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  _CTX_PCT=$(python3 - "$TRANSCRIPT" <<'PYEOF'
+import sys, json
+path = sys.argv[1]
+last_inp = 0
+try:
+    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+        for line in f:
+            line = line.strip()
+            if not line: continue
+            try:
+                obj = json.loads(line)
+            except Exception: continue
+            usage = None
+            if obj.get('type') == 'assistant':
+                usage = obj.get('message', {}).get('usage', {})
+            elif obj.get('role') == 'assistant':
+                usage = obj.get('usage', {})
+            if usage:
+                inp = usage.get('input_tokens', 0) or 0
+                if inp > last_inp:
+                    last_inp = inp
+except Exception:
+    pass
+if last_inp > 0:
+    pct = round(last_inp / 200000 * 100)
+    print(pct)
+PYEOF
+  )
+  if [ -n "$_CTX_PCT" ] && [[ "$_CTX_PCT" =~ ^[0-9]+$ ]]; then
+    # Export pour master.js (lecture avant chaque dispatch Telegram)
+    echo "$_CTX_PCT" > /tmp/masterclaude-ctx-pct 2>/dev/null
+
+    # Format entête par paliers : 35 (compact suggéré) · 50 (alerte) · 60 (restart imminent)
+    if [ "$_CTX_PCT" -ge 60 ]; then
+      CTX_INDICATOR="${_CTX_PCT}%🚨"
+      echo "[CTX-ALERT] Contexte ${_CTX_PCT}% — restart imminent par master.js (seuil 60%)"
+    elif [ "$_CTX_PCT" -ge 50 ]; then
+      CTX_INDICATOR="${_CTX_PCT}%🔥"
+    elif [ "$_CTX_PCT" -ge 35 ]; then
+      CTX_INDICATOR="${_CTX_PCT}%🟡"
+      echo "[CTX-COMPACT] Contexte ${_CTX_PCT}% ≥ 35% — lance \`/compact\` pour libérer 60-80%"
+    else
+      CTX_INDICATOR="${_CTX_PCT}%✅"
+    fi
+    echo "[CTX] fenêtre: ${CTX_INDICATOR}"
+  fi
+fi
+
 # §1 ENTÊTE — émis toujours si model connu (indépendant du nombre de tours dans le transcript).
 # Garantit que 🦙 et 🔌 apparaissent même en session compactée / début de session.
 _FF="$(cd "$(dirname "$0")/.." && pwd)/.claude/features.json"
@@ -219,7 +270,8 @@ fi
       _PULSE_CONTENT=$(cat "$PULSE_STATUS_FILE")
       _PULSE_INDICATOR=" | ${_PULSE_CONTENT}"
     fi
-    echo "\`[$(date '+%Y-%m-%d %H:%M:%S') | $MODEL] $_PASTILLE $_MMODE${_S1_OLLAMA} | $_MPROXY${_PULSE_INDICATOR}\`"
+    _CTX_PART="${CTX_INDICATOR:+ | $CTX_INDICATOR}"
+    echo "\`[$(date '+%Y-%m-%d %H:%M:%S') | $MODEL] $_PASTILLE $_MMODE${_S1_OLLAMA} | $_MPROXY${_PULSE_INDICATOR}${_CTX_PART}\`"
 }
 
 exit 0
