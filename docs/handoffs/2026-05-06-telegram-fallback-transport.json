@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "subject": "TelegramFallbackTransport — DoH + SNI fallback (pillage Hermes)",
+    "date": "2026-05-06",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "1a6eb1f..37606f2"
+  },
+  "from": {
+    "model": "claude-opus-4-7",
+    "context": "Portage du TelegramFallbackTransport depuis MasterHermesAgent vers MasterClaude pour rendre le bridge Telegram résilient quand le DNS local résout api.telegram.org vers une IP injoignable. Trois commits atomiques sur cette PR : (A) 2504349 feat(telegram): port TelegramFallbackTransport (DoH + SNI fallback) — création de lib/telegram_network.py avec DNS-over-HTTPS Google+Cloudflare, normalisation IPv4 (rejet privé/loopback/link-local), SNI préservé via extensions['sni_hostname'], sticky-IP après premier succès sous asyncio.Lock, retry uniquement sur ConnectError/ConnectTimeout (jamais HTTP), seed list 149.154.167.220 en dernier recours. (B) 4ec6308 feat(telegram): injecter TelegramFallbackTransport dans le bridge — patch scripts/telegram-bridge.py : import du module via sys.path (lib/ pas dans PYTHONPATH par défaut), résolution IPs au démarrage (env TELEGRAM_FALLBACK_IPS > DoH discovery > seed), branchement sur HTTPXRequest(httpx_kwargs={'transport': ...}) puis Application.builder().request(request).build(). (C) 37606f2 test(telegram): couvrir TelegramFallbackTransport — 7 tests pytest-asyncio : normalisation IPs, parse env CSV, classification erreurs retryables, préservation SNI/host header, passthrough non-telegram-host, fallback sur ConnectError, propagation erreurs non-connect. 7/7 passent. Aucune nouvelle dépendance (httpx déjà via python-telegram-bot, ipaddress et socket en stdlib). Adaptation Hermes : _resolve_proxy_url simplifié (env-only TELEGRAM_PROXY > HTTPS_PROXY > https_proxy), pas de gateway.platforms.base.",
+    "question": "Le sticky-IP est protégé par asyncio.Lock mais la première écriture (self._sticky_ip = ip) peut être lue concurremment par d'autres tâches qui sautent le double-check pattern — y a-t-il un risque de race observable (deux IPs adoptées en parallèle puis une seule l'emporte) qui dégraderait l'efficacité, ou un fix plus robuste à proposer ? Subsidiairement : la dépendance sys.path.insert dans scripts/telegram-bridge.py est-elle acceptable ou faut-il un vrai package Python pour lib/ ?",
+    "filesToRead": [
+      "lib/telegram_network.py",
+      "scripts/telegram-bridge.py",
+      "test/test_telegram_network.py",
+      "vault/plans/PROMPT-telegram-pillage.md"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile (concurrence, observabilité, edge cases)",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude",
+      "Pas de critique de style (formatage, naming) sauf si elle masque un bug",
+      "Si un bug réel : indique fichier:ligne + scénario reproductible"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans docs/handoffs/2026-05-06-telegram-fallback-transport.json.\""
+  },
+  "integration": null
+}
