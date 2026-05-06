@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "created_at": "2026-05-06T16:01:30Z",
+  "from_session_id": null,
+  "project_key": "MasterClaude",
+  "cwd": "/Users/malik/MasterClaude",
+  "reason": "ctx_burn_60_with_new_vision_go_parachute",
+  "fil_rouge": "Tentative migration bipartite (skill /migrate-now + executeMigration master) Jet 1 livré NON commité. Fix bridge Telegram post-compact (guard-monitor-bridge.sh UserPromptSubmit) NON commité mais validé en live. Master daemon a crashloop pendant test e2e (alternance 🔴/🟢 Telegram). Malik en a marre de la fragilité multi-maillons (Monitor + master + queue + IPC + hooks = château de cartes). NOUVELLE VISION Malik : daemon Go local 'claude-parachute' qui REMPLACE le mix Python+Node+JSON-files. Tout dans un binaire. Sessions, handoffs, Telegram, health, migration — un seul process, SQLite, HTTP :4001, hooks via client CLI cc-cli.",
+  "next_action": "Ping Telegram direct via curl (.env disponible, HTTP 200 testé). Annoncer session restored. Puis exposer à Malik archi détaillée Go : modules bridge/ orchestrator/ state/ health/ migration/, port :4001, SQLite, client cc-cli pour les hooks shell. NE COMMIT RIEN avant validation Malik.",
+  "warnings_for_successor": "1) Vérifier master daemon vivant : launchctl list | grep master + tail /tmp/masterclaude-master.log. Si crashed : launchctl kickstart -k gui/$UID/com.masterclaude.daemon. 2) Reponse 1778082778801-28b6ju.txt peut encore être en queue (pas .done). 3) FICHIERS NON COMMITÉS : hooks/guard-monitor-bridge.sh (NEW), .claude/settings.json (UserPromptSubmit guard + SessionStart handoff-restore), bin/master.js (executeMigration + /migrate), .claude/skills/migrate-now/SKILL.md (NEW), hooks/session-handoff-restore.sh (NEW), vault/handoffs/ (dir). 4) Fix Monitor self-healing testé OK en live. 5) Malik veut audace + créativité — la vision Go vient de lui, confirmer archi avec lui AVANT coding.",
+  "todos": [
+    {"subject": "Cartographier master.js + hooks Stop/SessionStart + wake-claude.sh", "status": "completed"},
+    {"subject": "Concevoir handoff.json (schéma + emplacement) couplé E3 vault Malik", "status": "completed"},
+    {"subject": "Implémenter migration bipartite : skill /migrate-now + executeMigration() côté master", "status": "completed"},
+    {"subject": "Implémenter SessionStart hook session-handoff-restore.sh", "status": "completed"},
+    {"subject": "Fix régression bridge Telegram post-/compact via guard-monitor-bridge.sh", "status": "completed"},
+    {"subject": "Tester e2e migration bipartite (partiel — révèle fragilité master crashloop)", "status": "in_progress"},
+    {"subject": "Proposer à Malik archi détaillée daemon Go claude-parachute", "status": "pending"},
+    {"subject": "Décider : commit fixs actuels (acquis) OU repartir clean avec Go ?", "status": "pending"},
+    {"subject": "Si Go validé : scaffold repo Go + premier endpoint /health", "status": "pending"}
+  ],
+  "vault_malik_slice": "",
+  "last_user_message": "je veux que tu montes un vrai serveur en go [...] putin tu es claude 4.7 [...]"
+}

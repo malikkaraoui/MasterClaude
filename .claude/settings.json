@@ -110,6 +110,10 @@
           {
             "type": "command",
             "command": "bash \"hooks/session-ipc-bridge.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"hooks/session-handoff-restore.sh\""
           }
         ]
       }
