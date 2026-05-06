@@ -9,9 +9,13 @@ from datetime import date
 from pathlib import Path
 
 
-def setup_logging(home: Path, debug: bool = False) -> logging.Logger:
-    """Configure root logger : fichier YYYY-MM-DD.log + stderr."""
-    log_dir = home / "logs" / "idriss"
+def setup_logging(home: Path, debug: bool = False, name: str = "idriss") -> logging.Logger:
+    """Configure root logger : fichier YYYY-MM-DD.log + stderr.
+
+    `name` détermine le sous-dossier de logs et le logger nommé renvoyé
+    (« idriss » par défaut, « leonor » pour Léonor).
+    """
+    log_dir = home / "logs" / name
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{date.today().isoformat()}.log"
 
@@ -31,4 +35,4 @@ def setup_logging(home: Path, debug: bool = False) -> logging.Logger:
     stream_handler.setFormatter(logging.Formatter(fmt))
     root.addHandler(stream_handler)
 
-    return logging.getLogger("idriss")
+    return logging.getLogger(name)

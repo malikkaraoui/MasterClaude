@@ -31,6 +31,15 @@ Ce que Claude ou Peter apprend sur le projet et qui mérite de survivre à la se
 - **Branchement npm test** : nouveau script `test:idriss` ajouté à la suite, pre-push gate transparent.
 - **Suite** : Léonor 🔭 (vendredi 22:00, mêmes patterns) puis Curator skills.
 
+### 2026-05-06 — Naissance de Léonor 🔭 (stratège hebdo vendredi 22:00)
+
+- **Décision Malik** : après Idriss qui voit la journée, Léonor voit la semaine. Lit le vault entier + tous les `~/<projet>/CLAUDE.md` + les 5 bilans Idriss lundi→vendredi. Sortie : 3 propositions / liens entre projets / 1 chantier à enterrer / questions ouvertes.
+- **Pipeline simplifié** : pas de fan-out, Sonnet 4.6 direct (1 appel) + sanity-check Qwen local optionnel.
+- **Plist** : `StartCalendarInterval` `Weekday=5 Hour=22 Minute=0` (vendredi 22h), `RunAtLoad=false`. Versionné `bin/leonor/launchd/`, install via `bin/leonor/install-launchd.sh` — Malik valide manuellement.
+- **Tests** : 17 cas verts (inputs, compose, writer, e2e, sanity, kill switch, dégradé Sonnet).
+- **Réutilise le venv partagé Idriss** + le `setup_logging` + `ollama_client` d'Idriss (pas de duplication).
+- **Kill switch** : `touch /tmp/leonor-disabled`.
+
 ### YYYY-MM-DD — Découverte
 
 - Observation :
