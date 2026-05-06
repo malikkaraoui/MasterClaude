@@ -139,7 +139,7 @@ Plan Pro → `acceptEdits` + allow/deny, `maxBudgetUsd` défini. Push autonome a
 
 ## §25 Inter-agents — Review Copilot auto
 
-**Générer le handoff automatiquement, sans demander**, dès que : feature terminée, bug fix critique, 100+ lignes modifiées, PR créée (même docs only), ou avant tout commit/push/bump. **Séquence intégrale obligatoire** :
+**Générer le handoff automatiquement, sans demander**, dès que : feature terminée, bug fix critique, 100+ lignes modifiées, PR créée (même docs only), ou avant tout commit/push/bump. **Séquence intégrale obligatoire** (merge final = `rebase` uniquement, `gh pr merge --rebase --delete-branch`, jamais squash → main vivante, commits atomiques traçables) :
 1. `/review-copilot` → handoff JSON dans `docs/handoffs/`
 2. commit handoff + push
 3. PR créée en **draft**

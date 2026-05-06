@@ -123,7 +123,7 @@ Plan Pro → `acceptEdits` + allow/deny, `maxBudgetUsd` défini. Push autonome a
 
 ## §25 Inter-agents — Review Copilot auto
 
-**Réflexe non négociable, pas un choix.** Dès que : feature terminée, bug fix critique, 100+ lignes modifiées, PR créée (même docs only), 3+ tentatives échouées, ou avant tout commit/push/bump → exécuter la **séquence intégrale** sans demander confirmation entre les étapes :
+**Réflexe non négociable, pas un choix.** Dès que : feature terminée, bug fix critique, 100+ lignes modifiées, PR créée (même docs only), 3+ tentatives échouées, ou avant tout commit/push/bump → exécuter la **séquence intégrale** sans demander confirmation entre les étapes (merge final = `rebase` uniquement, `gh pr merge --rebase --delete-branch`, jamais squash → main vivante, commits atomiques traçables) :
 
 1. `/review-copilot` → handoff JSON dans `docs/handoffs/`
 2. commit handoff + push
