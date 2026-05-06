@@ -26,9 +26,27 @@
     ]
   },
   "response": {
-    "model": null,
-    "content": null,
-    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans docs/handoffs/2026-05-06-telegram-fallback-transport.json.\""
+    "model": "github-copilot-pr-reviewer",
+    "submittedAt": "2026-05-06T19:42:56Z",
+    "reviewState": "COMMENTED",
+    "content": "Race sticky-IP / asyncio.Lock — il existe un scénario où deux tâches concurrentes peuvent réussir chacune via une IP fallback différente avant que _sticky_ip ne soit stabilisée (la dernière à acquérir le lock gagne). C'est observable uniquement comme un effet d'optimisation (quelques requêtes initiales peuvent tenter des IPs différentes / logs multipliés), mais ça ne casse pas la correction (toutes les requêtes continueront à retenter les fallbacks sur ConnectError/ConnectTimeout). En pratique, le design actuel évite de sérialiser toutes les requêtes Telegram (ce qui serait plus coûteux) et le double-check dans le lock empêche les écritures inutiles, donc le compromis est raisonnable. sys.path.insert dans scripts/telegram-bridge.py — dans un repo orienté scripts exécutés directement (sans packaging Python), c'est acceptable et courant pour éviter de dépendre d'un PYTHONPATH externe. Un vrai packaging (lib en package + exécution via module / install editable) serait plus propre mais plus lourd à mettre en place ; ici, le Path(__file__).resolve() rend l'approche relativement robuste. Commentaire inline : compléter response.model et response.content du handoff pour conserver la conclusion dans le repo.",
+    "inlineComments": [
+      {
+        "path": "docs/handoffs/2026-05-06-telegram-fallback-transport.json",
+        "line": 30,
+        "body": "Le handoff est ajouté mais reste incomplet : response.model et response.content sont encore à null, ce qui empêche de conserver la conclusion de review dans le repo. Renseigner ces champs (sans modifier meta/from) avec la réponse attendue sur la race sticky-IP et le sys.path.insert."
+      }
+    ]
   },
-  "integration": null
+  "integration": {
+    "verdict": "Aucun bug ni régression identifiés par la review. Les deux préoccupations soulevées (race sticky-IP et sys.path.insert) sont validées par Copilot comme compromis raisonnables compatibles avec le contexte du repo (scripts exécutés directement, pas de packaging Python). Pas de modification du code applicatif requise.",
+    "retained_implement": [
+      "Compléter le handoff JSON (response.model, response.content, integration) — fait dans le commit fix Copilot #4 pour conserver la conclusion de review dans le repo.",
+      "Ajouter __pycache__/, *.pyc et .pytest_cache/ au .gitignore — Copilot SWE agent avait pushé un commit (87573d6) ajoutant des bytecode .pyc qui n'auraient jamais dû être versionnés ; les artefacts ont été supprimés et la règle gitignore prévient une récidive."
+    ],
+    "deferred": [
+      "Packaging Python pour lib/ (vrai package + install editable au lieu de sys.path.insert) : amélioration cosmétique non urgente, à reconsidérer si lib/ s'étoffe."
+    ],
+    "rejected": []
+  }
 }
