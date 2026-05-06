@@ -15,7 +15,7 @@
 
 ## Sur le feu
 
-- **parachute Étape 7** — `cc-parachute` sub-commands (`logs`, `sessions`, `restart`), WebUI `/dashboard`, backup SQLite quotidien
+- ✅ **parachute Étape 7** — `cc-parachute` CLI (health/sessions/logs/restart), WebUI `/dashboard` Go-embed, backup quotidien tar.gz · commit 00cd464
 - **Phase E1** — `bin/master.js` : Telegram polling minimal + dispatch commandes
 - **Phase E2** — `src/master/session-manager.js` : spawn/monitor sessions `claude` par projet (cwd correct)
 - Adapter Telegram routing pour multi-projets (était mono-projet dans claude-atelier)
