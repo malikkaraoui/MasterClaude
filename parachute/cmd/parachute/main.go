@@ -27,6 +27,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/malikkaraoui/MasterClaude/parachute/internal/backup"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/health"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/migrate"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/server"
@@ -117,6 +118,9 @@ func main() {
 			}
 		}
 	}()
+
+	// Backup quotidien du dataDir.
+	go backup.RunDaily(ctx, *dataDir)
 
 	// Unix socket : migration bipartite Claude → parachute.
 	socketErr := make(chan error, 1)

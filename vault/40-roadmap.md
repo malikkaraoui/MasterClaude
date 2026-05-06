@@ -7,9 +7,15 @@
 - ✅ v0.1.0 — Fork depuis claude-atelier v0.26.0 · CLAUDE.md §0+§1 MasterClaude · VISION.md
 - ✅ Telegram bridge (Phase A+B+D hérités de claude-atelier) — bridge Python, SQLite, voix, mailbox
 - ✅ Peter vault (Phases A+B+C hérités) — index SHA256, graphe, query/path/explain, MCP
+- ✅ **parachute Étape 1** — store SQLite + API HTTP (handoff CRUD + sessions CRUD) · PR #3
+- ✅ **parachute Étape 3** — sessions manager (spawn/kill/heartbeat/watchdog) · PR #3
+- ✅ **parachute Étape 5** — migrate handler Unix socket `/tmp/parachute.sock` · PR #3
+- ✅ **parachute Étape 4** — health.Checker + alertFn → `/tmp/parachute-alerts.jsonl` → Telegram · commit b562225
+- ✅ **parachute Étape 6** — `bin/master.js` thin wrapper feature flags (`PARACHUTE_SESSION_TAKEOVER`, `PARACHUTE_HANDOFF_TAKEOVER`, `PARACHUTE_TELEGRAM_TAKEOVER`) · commit b562225
 
 ## Sur le feu
 
+- **parachute Étape 7** — `cc-parachute` sub-commands (`logs`, `sessions`, `restart`), WebUI `/dashboard`, backup SQLite quotidien
 - **Phase E1** — `bin/master.js` : Telegram polling minimal + dispatch commandes
 - **Phase E2** — `src/master/session-manager.js` : spawn/monitor sessions `claude` par projet (cwd correct)
 - Adapter Telegram routing pour multi-projets (était mono-projet dans claude-atelier)
