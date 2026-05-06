@@ -442,6 +442,51 @@ async function restartSession(oldPid, ctxPct) {
   return wakeClaudeSession();
 }
 
+// --- Migration bipartite : pousse MIGRATE_REQUEST à Claude, attend handoff, puis kill+wake ---
+// Différence avec restartSession : Claude écrit lui-même son handoff (skill /migrate-now)
+// AVANT le kill. Le hook SessionStart de la nouvelle session restaurera le contexte.
+async function executeMigration(claudePid, projectKey, reason) {
+  const handoffFile = `/tmp/masterclaude-handoff-${projectKey}.json`;
+  // Nettoyer un éventuel handoff stale (sécurité)
+  try { _unlink(handoffFile); } catch {}
+
+  const migratePrompt = [
+    '🔄 MIGRATE_REQUEST du master daemon',
+    `Raison : ${reason || 'manual'}`,
+    `Projet : ${projectKey}`,
+    '',
+    'Tu vas être migré vers une nouvelle session. Lance MAINTENANT la skill /migrate-now',
+    `pour préparer ton handoff. Écris ${handoffFile} avant la fin de cette réponse.`,
+    'Le master déclenchera le kill + spawn dès que ce fichier apparaît.',
+  ].join('\n');
+
+  const id = `${Date.now()}-mig-${Math.random().toString(36).slice(2, 6)}`;
+  const entry = JSON.stringify({ id, ts: Date.now(), user: migratePrompt, project: projectKey });
+  try {
+    _wfs(INBOX_FILE, entry + '\n', { flag: 'a' });
+  } catch (e) {
+    return `❌ Erreur écriture inbox : ${e.message}`;
+  }
+  await send(`📨 MIGRATE_REQUEST envoyé à Claude (raison: ${reason || 'manual'})`).catch(() => {});
+
+  // Attendre l'apparition du handoff (max 90s — le temps que Claude rédige)
+  const HANDOFF_TIMEOUT_MS = 90000;
+  const start = Date.now();
+  while (!_exists(handoffFile)) {
+    if (Date.now() - start > HANDOFF_TIMEOUT_MS) {
+      return '❌ Handoff non écrit après 90s. Migration annulée — la session reste active.';
+    }
+    if (claudePid && !isPidAlive(claudePid)) {
+      return '💀 Session Claude morte avant écriture du handoff. Migration annulée.';
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  await send('📦 Handoff prêt. Migration en cours…').catch(() => {});
+  await restartSession(claudePid, getCtxPct());
+  return '✅ Migration effectuée. La nouvelle session restaurera le handoff au boot.';
+}
+
 // --- Single dispatch path : tout message Telegram passe par ici ---
 // Garanties : (1) jamais de subprocess fantôme, (2) auto-wake si pas de session,
 // (3) restart auto si ctx >= 60% APRÈS la réponse au tour courant.
@@ -591,7 +636,8 @@ const HELP = `Commandes Master :
 /register <nom> <chemin> — enregistrer un projet
 /reset — vider l'historique de la session
 /run <tâche> — exécute une tâche (outils complets) sur le projet actif
-/trigger <tâche> — lance RemoteTrigger cloud (Bash complet, répond ici directement)`;
+/trigger <tâche> — lance RemoteTrigger cloud (Bash complet, répond ici directement)
+/migrate [raison] — demande à Claude de préparer un handoff puis migre la session (kill + nouvelle)`;
 
 function handleSystemCommand(text) {
   if (text === '/start' || text === '/help') return HELP;
@@ -727,6 +773,21 @@ while (running) {
       const { handled, reply: projReply } = sessions.handleCommand(text);
       if (handled) {
         await send(projReply).catch(() => {});
+        continue;
+      }
+
+      // /migrate [raison] → handoff bipartite : Claude prépare, master kill + spawn
+      if (text === '/migrate' || text.startsWith('/migrate ')) {
+        const reason = text === '/migrate' ? 'manual' : text.slice(9).trim() || 'manual';
+        const sig2 = readSessionSignal();
+        const claudePid = sig2.valid ? sig2.claudePid : findExistingClaudeSession();
+        if (!claudePid) {
+          await send('❌ Aucune session Claude active à migrer. Tape un message pour la réveiller d\'abord.').catch(() => {});
+          continue;
+        }
+        const projectKey = sessions.active?.name || 'global';
+        const result = await executeMigration(claudePid, projectKey, reason);
+        await send(result).catch(() => {});
         continue;
       }
 

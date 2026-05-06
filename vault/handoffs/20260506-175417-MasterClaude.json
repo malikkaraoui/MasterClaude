@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "created_at": "2026-05-06T15:54:17Z",
+  "from_session_id": null,
+  "project_key": "MasterClaude",
+  "cwd": "/Users/malik/MasterClaude",
+  "reason": "test_e2e_migration_bridge_fix",
+  "fil_rouge": "On finalise le test end-to-end de la migration bipartite (option α : Claude écrit son propre handoff via skill /migrate-now). Jet 1 livré (skill + executeMigration côté master + session-handoff-restore.sh). En parallèle on a corrigé une régression bridge Telegram (Monitor tué par /compact) avec un fix self-healing : hooks/guard-monitor-bridge.sh sur UserPromptSubmit qui pgrep le tail et force la relance Monitor si absent. Les 2 fixs sont prêts mais NON commités. Le user a explicitement demandé de tester la migration AVANT de commit. Cette session écrit son testament puis se laisse tuer.",
+  "next_action": "Confirmer dans Telegram que tu es bien la nouvelle session (ping ✨ déjà envoyé par le hook). Puis demander à Malik s'il valide les 2 fixs pour les commit ensemble : (1) hooks/guard-monitor-bridge.sh + .claude/settings.json (régression bridge post-compact) ET (2) bin/master.js + .claude/skills/migrate-now/SKILL.md + hooks/session-handoff-restore.sh + .claude/settings.json hook SessionStart (migration bipartite Jet 1).",
+  "warnings_for_successor": "Le master daemon a été redémarré juste avant la migration (PID change). La task #5 (Tester end-to-end) passe en in_progress avec ce test. Monitor sur /tmp/tg-inbox.jsonl doit être relancé au boot — le hook UserPromptSubmit guard-monitor-bridge.sh le fera automatiquement au premier prompt utilisateur, et le hook SessionStart bridge IPC l'annonce. NE PAS commiter avant validation explicite. Jet 2 (auto-proposition burn ≥ 60%) reste à faire.",
+  "todos": [
+    {"subject": "Cartographier master.js + hooks Stop/SessionStart + wake-claude.sh", "status": "completed"},
+    {"subject": "Concevoir handoff.json (schéma + emplacement) couplé E3 vault Malik", "status": "completed"},
+    {"subject": "Implémenter migration bipartite : skill /migrate-now + executeMigration() côté master", "status": "completed"},
+    {"subject": "Implémenter SessionStart hook session-handoff-restore.sh", "status": "completed"},
+    {"subject": "Tester end-to-end : kill session → nouvelle session répond Telegram", "status": "in_progress"},
+    {"subject": "Commiter les 2 fixs ensemble (bridge guard + migration bipartite) après validation Malik", "status": "pending"},
+    {"subject": "Jet 2 — auto-proposition migration sur burn ≥ 60% (bipartite : master tend la perche, user OK)", "status": "pending"}
+  ],
+  "vault_malik_slice": "",
+  "last_user_message": "Avant de commit je veux que tu fermes soigneusement cette session dans le terminal que tu en ouvres une nouvelle et que tu te téléporte"
+}

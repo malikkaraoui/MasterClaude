@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "created_at": "2026-05-06T16:09:00Z",
+  "from_session_id": null,
+  "project_key": "MasterClaude",
+  "cwd": "/Users/malik/MasterClaude",
+  "reason": "ctx_burn_proche_60_parachute_v0.1.0_livre",
+  "fil_rouge": "Session intense. Trois livraisons NON commitées : (1) hooks/guard-monitor-bridge.sh — fix self-healing du Monitor Telegram tué par /compact, validé en live ; (2) Migration bipartite Jet 1 — skill /migrate-now + executeMigration() côté master + session-handoff-restore.sh, partiellement testé (master a crashloop pendant le test) ; (3) parachute v0.1.0 — daemon Go local sur :4001, REMPLACE progressivement master.js. Étape 1 = persistance handoffs via HTTP. Binaire compilé, LaunchAgent KeepAlive installé, tests Go verts, client shell bin/cc-parachute opérationnel. Telegram pingé directement via curl quand master était down (HTTP 200 systématique).",
+  "next_action": "Demander à Malik validation pour commit groupé : (a) parachute v0.1.0 (gros, propre, isolé sous parachute/) + bin/cc-parachute, (b) fix bridge guard-monitor-bridge.sh + .claude/settings.json, (c) migration bipartite Jet 1 (skill + master.js + hook + settings.json). Trois commits atomiques. Vérifier au boot que parachute LaunchAgent est UP : 'launchctl list | grep parachute' + curl http://127.0.0.1:4001/health.",
+  "warnings_for_successor": "1) parachute LaunchAgent label = com.masterclaude.parachute (vs com.masterclaude.daemon = master.js). Les deux co-existent. 2) Le serveur Go a déjà ton handoff précédent en mémoire (push via cc-parachute). Pour le récupérer : cc-parachute consume MasterClaude. 3) hooks/session-handoff-restore.sh actuel lit /tmp/masterclaude-handoff-MasterClaude.json (legacy) PAS le serveur Go. À migrer plus tard. 4) Master daemon a peut-être crashloop — vérifier 'tail /tmp/masterclaude-master.log'. 5) Réponse Telegram pendante 1778082778801-28b6ju.txt peut encore être en queue. 6) Roadmap parachute documentée dans parachute/README.md (étapes 2-7).",
+  "todos": [
+    {"subject": "Cartographier master.js + hooks Stop/SessionStart + wake-claude.sh", "status": "completed"},
+    {"subject": "Concevoir handoff.json (schéma + emplacement) couplé E3 vault Malik", "status": "completed"},
+    {"subject": "Implémenter migration bipartite : skill /migrate-now + executeMigration() côté master", "status": "completed"},
+    {"subject": "Implémenter SessionStart hook session-handoff-restore.sh", "status": "completed"},
+    {"subject": "Fix régression bridge Telegram post-/compact via guard-monitor-bridge.sh", "status": "completed"},
+    {"subject": "parachute v0.1.0 — Go daemon HTTP :4001 + store + cc-parachute + LaunchAgent", "status": "completed"},
+    {"subject": "Note vault/30-discoveries.md (parachute + Monitor regression)", "status": "completed"},
+    {"subject": "Demander validation Malik puis commit groupé en 3 commits atomiques", "status": "pending"},
+    {"subject": "parachute Étape 2 — bridge Telegram natif (remplace master.js polling)", "status": "pending"},
+    {"subject": "parachute Étape 3 — orchestrateur sessions (spawn/kill via osascript)", "status": "pending"},
+    {"subject": "Migrer hooks/session-handoff-restore.sh pour lire depuis cc-parachute consume au lieu de /tmp", "status": "pending"}
+  ],
+  "vault_malik_slice": "",
+  "last_user_message": "fonce baby je suis en balade. donc code et tiens toi a l'objectif !!!!! tu as les coudés franches donc profite !"
+}
