@@ -1,42 +1,54 @@
 // Package server expose l'API HTTP du parachute (port :4001 par défaut).
 //
 // Endpoints :
-//   GET  /health                         → liveness + version
-//   GET  /v1/handoff/{projectKey}        → récupère le handoff live (404 si absent)
-//   POST /v1/handoff/{projectKey}        → écrit le handoff (overwrite + archive)
-//   POST /v1/handoff/{projectKey}/consume → lit + supprime le handoff (atomique)
-//   GET  /v1/projects                    → liste les projets avec handoff actif
 //
-// Auth : token bearer optionnel via PARACHUTE_TOKEN. Si absent, écoute en
-// localhost-only (127.0.0.1) — usage personnel mono-machine.
+//	GET  /health                              → liveness + version
+//	GET  /v1/handoff/{projectKey}             → récupère le handoff live (404 si absent)
+//	POST /v1/handoff/{projectKey}             → écrit le handoff (overwrite + archive)
+//	POST /v1/handoff/{projectKey}/consume     → lit + supprime le handoff (atomique)
+//	GET  /v1/projects                         → liste les projets avec handoff actif
+//	GET  /v1/sessions                         → liste les sessions Claude actives
+//	POST /v1/sessions/{projectKey}/spawn      → spawn une session Claude (vault + handoff injectés)
+//	POST /v1/sessions/{projectKey}/heartbeat  → mise à jour heartbeat (session vivante)
+//	DELETE /v1/sessions/{projectKey}          → kill propre de la session
+//
+// Auth : token bearer optionnel via PARACHUTE_TOKEN.
 package server
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/malikkaraoui/MasterClaude/parachute/internal/sessions"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/store"
 )
 
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 type Server struct {
-	store *store.Store
-	token string
-	mux   *http.ServeMux
-	start time.Time
+	store   *store.Store
+	manager *sessions.Manager
+	token   string
+	mux     *http.ServeMux
+	start   time.Time
 }
 
 func New(s *store.Store, token string) *Server {
+	return NewWithSessions(s, token, nil)
+}
+
+func NewWithSessions(s *store.Store, token string, mgr *sessions.Manager) *Server {
 	srv := &Server{
-		store: s,
-		token: token,
-		mux:   http.NewServeMux(),
-		start: time.Now(),
+		store:   s,
+		manager: mgr,
+		token:   token,
+		mux:     http.NewServeMux(),
+		start:   time.Now(),
 	}
 	srv.routes()
 	return srv
@@ -46,7 +58,6 @@ func (s *Server) Handler() http.Handler {
 	return loggingMiddleware(s.mux)
 }
 
-// statusRecorder capture le code HTTP pour le logging.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -67,8 +78,6 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// loggingMiddleware log chaque requête avec slog (clé/valeur structuré).
-// Filtre les /health pour éviter de noyer le log (KeepAlive en pingue).
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -78,7 +87,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		if rec.status == 0 {
 			rec.status = http.StatusOK
 		}
-		// Skip /health pour ne pas spammer le log (santé monitoring fréquent).
 		if r.URL.Path == "/health" && rec.status == 200 {
 			return
 		}
@@ -105,18 +113,19 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/handoff/{projectKey}", s.guard(s.handleGetHandoff))
 	s.mux.HandleFunc("POST /v1/handoff/{projectKey}", s.guard(s.handlePutHandoff))
 	s.mux.HandleFunc("POST /v1/handoff/{projectKey}/consume", s.guard(s.handleConsumeHandoff))
+	s.mux.HandleFunc("GET /v1/sessions", s.guard(s.handleListSessions))
+	s.mux.HandleFunc("POST /v1/sessions/{projectKey}/spawn", s.guard(s.handleSpawnSession))
+	s.mux.HandleFunc("POST /v1/sessions/{projectKey}/heartbeat", s.guard(s.handleHeartbeat))
+	s.mux.HandleFunc("DELETE /v1/sessions/{projectKey}", s.guard(s.handleKillSession))
 }
 
-// guard applique l'auth bearer si un token est configuré.
 func (s *Server) guard(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.token == "" {
 			h(w, r)
 			return
 		}
-		auth := r.Header.Get("Authorization")
-		expected := "Bearer " + s.token
-		if auth != expected {
+		if r.Header.Get("Authorization") != "Bearer "+s.token {
 			writeError(w, http.StatusUnauthorized, "auth: token bearer invalide")
 			return
 		}
@@ -124,7 +133,18 @@ func (s *Server) guard(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+// requireManager retourne false et écrit 503 si le sessions manager n'est pas initialisé.
+func (s *Server) requireManager(w http.ResponseWriter) bool {
+	if s.manager == nil {
+		writeError(w, http.StatusServiceUnavailable, "sessions manager non initialisé")
+		return false
+	}
+	return true
+}
+
+// --- Handoff handlers ---
+
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":     "ok",
 		"version":    Version,
@@ -133,7 +153,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListProjects(w http.ResponseWriter, _ *http.Request) {
 	projects, err := s.store.ListProjects()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "list: "+err.Error())
@@ -149,7 +169,7 @@ func (s *Server) handleGetHandoff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h, err := s.store.GetHandoff(key)
-	if err == store.ErrNotFound {
+	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "handoff non trouvé pour "+key)
 		return
 	}
@@ -189,7 +209,7 @@ func (s *Server) handleConsumeHandoff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h, err := s.store.ConsumeHandoff(key)
-	if err == store.ErrNotFound {
+	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "handoff non trouvé pour "+key)
 		return
 	}
@@ -199,6 +219,88 @@ func (s *Server) handleConsumeHandoff(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, h)
 }
+
+// --- Sessions handlers ---
+
+func (s *Server) handleListSessions(w http.ResponseWriter, _ *http.Request) {
+	if !s.requireManager(w) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": s.manager.List()})
+}
+
+func (s *Server) handleSpawnSession(w http.ResponseWriter, r *http.Request) {
+	if !s.requireManager(w) {
+		return
+	}
+	key := r.PathValue("projectKey")
+	if !validProjectKey(key) {
+		writeError(w, http.StatusBadRequest, "projectKey invalide")
+		return
+	}
+	var body struct {
+		Cwd string `json:"cwd"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "JSON invalide: "+err.Error())
+		return
+	}
+	if body.Cwd == "" {
+		writeError(w, http.StatusBadRequest, "cwd requis")
+		return
+	}
+	if err := s.manager.Spawn(key, body.Cwd); err != nil {
+		if errors.Is(err, sessions.ErrAlreadyRunning) {
+			writeError(w, http.StatusConflict, "session déjà active pour "+key)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "spawn: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"status": "spawned", "project_key": key})
+}
+
+func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
+	if !s.requireManager(w) {
+		return
+	}
+	key := r.PathValue("projectKey")
+	if !validProjectKey(key) {
+		writeError(w, http.StatusBadRequest, "projectKey invalide")
+		return
+	}
+	if err := s.manager.Heartbeat(key); err != nil {
+		if errors.Is(err, sessions.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "session introuvable: "+key)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "heartbeat: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "project_key": key})
+}
+
+func (s *Server) handleKillSession(w http.ResponseWriter, r *http.Request) {
+	if !s.requireManager(w) {
+		return
+	}
+	key := r.PathValue("projectKey")
+	if !validProjectKey(key) {
+		writeError(w, http.StatusBadRequest, "projectKey invalide")
+		return
+	}
+	if err := s.manager.Kill(key); err != nil {
+		if errors.Is(err, sessions.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "session introuvable: "+key)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "kill: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "killed", "project_key": key})
+}
+
+// --- Helpers ---
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -212,7 +314,6 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{"error": msg, "status": status})
 }
 
-// validProjectKey limite aux caractères safe pour fs paths.
 func validProjectKey(key string) bool {
 	if key == "" || len(key) > 64 {
 		return false
@@ -226,9 +327,5 @@ func validProjectKey(key string) bool {
 			return false
 		}
 	}
-	if strings.HasPrefix(key, ".") || strings.HasPrefix(key, "-") {
-		return false
-	}
-	return true
+	return !strings.HasPrefix(key, ".") && !strings.HasPrefix(key, "-")
 }
-
