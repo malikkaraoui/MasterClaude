@@ -22,9 +22,16 @@
     ]
   },
   "response": {
-    "model": null,
-    "content": null,
-    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+    "model": "github-copilot-pr-reviewer",
+    "content": "Review Copilot PR #2 — 2 commentaires inline sur hooks/model-metrics.sh.\n\n1) **Bug critique détection fenêtre 1M** (ligne 195) : la condition `'[1m]' in model` ne peut JAMAIS être vraie ici, car `MODEL` est normalisé en amont par `sed 's/\\[.*$//'` (ligne 40) et le cache `claude-atelier-current-model` écrit par `routing-check.sh` est aussi normalisé. Conséquence : `window` reste à 200_000 même sur Opus 1M, le % CTX est sur-estimé d'un facteur 5, et les seuils 35/50/60 se déclenchent prématurément. Fix : passer le MODEL non normalisé (préserver le suffixe `[1m]`) au bloc Python, ou conserver en parallèle un MODEL_RAW dédié.\n\n2) **Couverture de test absente** (ligne 197) : la nouvelle logique CTX (somme cache_read/cache_creation, fenêtre 1M) n'est pas exercée par `test/hooks.js` — les transcripts générés par `makeTranscript` n'incluent pas de `usage`. La régression passerait inaperçue en CI. Fix : ajouter au moins 1 test qui injecte un transcript avec `message.usage` (input_tokens + cache_read_input_tokens + cache_creation_input_tokens) et vérifie le palier produit (✅/🟡/🔥/🚨), incluant un cas modèle suffixé `[1m]`.",
+    "_instruction": "Champ rempli par Claude après lecture des commentaires GitHub Copilot."
   },
-  "integration": null
+  "integration": {
+    "retained_implement": [
+      "FIX hooks/model-metrics.sh : créer `MODEL_RAW` non normalisé (préservant le suffixe `[1m]`) en parallèle du `MODEL` normalisé. `MODEL` continue d'alimenter le tier matching (METRICS Python), `MODEL_RAW` est passé au bloc CTX pour la détection de fenêtre 1M. Manifest sha resynchronisé (586a483c2bb52c5e → 8bc420b8124f2f5b).",
+      "AJOUT test/hooks.js : 4 tests CTX % couvrant — (a) opus [1m] avec cache → ≈9-10% ✅, (b) sonnet 200K mêmes tokens → 48% 🟡 + [CTX-COMPACT], (c) opus [1m] saturé 70% → 🚨 + [CTX-ALERT], (d) input_tokens seul sans cache → calcul correct. 73/73 tests passent."
+    ],
+    "rejected": [],
+    "verdict": "VALIDÉ — les 2 commentaires Copilot étaient pertinents et bloquants. Le commentaire #1 révélait un bug-dans-le-fix : ma première itération aurait été inopérante en production (window toujours = 200K). Le commentaire #2 a permis d'ajouter une régression-net sur la nouvelle logique. Aucun rejet : les deux suggestions sont implémentées telles quelles. PR #2 prête à merger après nouvelle CI verte."
+  }
 }

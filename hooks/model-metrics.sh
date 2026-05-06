@@ -35,13 +35,18 @@ except: pass
 [ ! -f "$TRANSCRIPT" ] && exit 0
 
 # Résoudre le modèle : live > cache
+# MODEL = identifiant normalisé (sans suffixe [...]) → tier matching opus/haiku/sonnet
+# MODEL_RAW = identifiant brut conservant le suffixe `[1m]` → détection fenêtre 1M (bloc CTX)
 MODEL=""
+MODEL_RAW=""
 if [ -n "$LIVE_MODEL" ]; then
+    MODEL_RAW=$(echo "$LIVE_MODEL" | tr -d '\r\n')
     MODEL=$(echo "$LIVE_MODEL" | sed 's/\[.*$//' | tr -d '\r\n')
 fi
 if [ -z "$MODEL" ]; then
     BASE_TMP="${CLAUDE_ATELIER_TMPDIR:-/tmp}"
     MODEL=$(cat "$BASE_TMP/claude-atelier-current-model" 2>/dev/null | tr -d '\r\n')
+    [ -z "$MODEL_RAW" ] && MODEL_RAW="$MODEL"
 fi
 [ -z "$MODEL" ] && exit 0
 
@@ -163,7 +168,7 @@ fi
 # Bug fix : input_tokens seul ne reflète que l'uncached (~0 quand cache hit) → faux 0%
 CTX_INDICATOR=""
 if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
-  _CTX_PCT=$(python3 - "$TRANSCRIPT" "$MODEL" <<'PYEOF'
+  _CTX_PCT=$(python3 - "$TRANSCRIPT" "$MODEL_RAW" <<'PYEOF'
 import sys, json
 path = sys.argv[1]
 model = (sys.argv[2] if len(sys.argv) > 2 else '').lower()
