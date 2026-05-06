@@ -38,7 +38,8 @@
       "Bash(python scripts/switch_model.py*)",
       "Bash(python3 scripts/switch_model.py*)",
       "Edit(.claude/settings.json)",
-      "Write(.claude/settings.json)"
+      "Write(.claude/settings.json)",
+      "Monitor"
     ],
     "deny": [
       "Bash(rm -rf:*)",
@@ -101,6 +102,10 @@
           {
             "type": "command",
             "command": "bash \"hooks/detect-design-need.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'SIG=/tmp/masterclaude-real-claude-active; PID=$(cat \"$SIG\" 2>/dev/null | cut -d: -f2); echo \"$(date +%s):${PID:-0}\" > \"$SIG\"'"
           }
         ]
       }

@@ -84,15 +84,19 @@ const ROOT = resolve(__dirname, '..');
 const TRANSCRIBE_SCRIPT = join(ROOT, 'scripts', 'transcribe-daemon.py');
 
 // --- Lockfile : une seule instance ---
-const LOCKFILE = '/tmp/masterclaude-master.lock';
-if (_exists(LOCKFILE)) {
-  const pid = parseInt(_rfs(LOCKFILE, 'utf8').trim(), 10);
-  try {
-    process.kill(pid, 0);
-    process.stderr.write(`[master] instance déjà active (PID ${pid}) — sortie\n`);
-    process.exit(0);
-  } catch { /* lock périmé */ }
+// Singleton strict : tuer TOUS les bin/master.js existants sauf soi
+{
+  const { spawnSync: _ss } = await import('node:child_process');
+  const r = _ss('pgrep', ['-f', 'bin/master.js']);
+  const pids = (r.stdout?.toString() || '').trim().split('\n')
+    .map(p => parseInt(p, 10)).filter(p => p && p !== process.pid);
+  if (pids.length) {
+    for (const p of pids) { try { process.kill(p, 'SIGKILL'); } catch {} }
+    process.stderr.write(`[master] instances précédentes tuées : ${pids.join(',')} — démarrage PID=${process.pid}\n`);
+    await new Promise(r => setTimeout(r, 300));
+  }
 }
+const LOCKFILE = '/tmp/masterclaude-master.lock';
 _wfs(LOCKFILE, `${process.pid}\n`);
 process.on('exit', () => { try { _unlink(LOCKFILE); } catch {} });
 
@@ -298,7 +302,7 @@ async function askClaude(userMsg, projectKey) {
   const prompt = relevant
     ? `${system}\n\n[Mémoire pertinente]\n${relevant}\n\n${userMsg}`
     : `${system}\n\n${userMsg}`;
-  const args = ['--print', '--output-format', 'text', '--dangerously-skip-permissions', '--continue', '-p', prompt];
+  const args = ['--print', '--output-format', 'text', '--dangerously-skip-permissions', '-p', prompt];
   const childEnv = { ...process.env };
   delete childEnv.ANTHROPIC_API_KEY; // Claude Code utilise OAuth Max plan, pas la clé API
 
@@ -335,20 +339,19 @@ async function askClaude(userMsg, projectKey) {
 
 // --- IPC bridge — route vers THIS session si active, fallback subprocess sinon ---
 async function askRealClaude(userMsg, projectKey) {
-  // Si THIS session n'est pas en écoute → fallback subprocess classique
   if (!_exists(REAL_CLAUDE_ACTIVE_FILE)) {
     return askClaude(userMsg, projectKey);
   }
-  // Valider TTL : signal file = "timestamp:PID" → périmé si > 10 min
+  // Valider TTL : signal file = "timestamp:PID" → périmé si > 2h
   try {
     const sig = _rfs(REAL_CLAUDE_ACTIVE_FILE, 'utf8').trim();
     const ts = parseInt(sig.split(':')[0], 10);
-    if (!ts || (Date.now() / 1000 - ts) > 600) {
-      process.stdout.write(`[ipc] signal périmé (${Math.round(Date.now() / 1000 - ts)}s > 600s) — fallback subprocess\n`);
+    if (!ts || (Date.now() / 1000 - ts) > 7200) {
+      process.stdout.write(`[ipc] signal périmé (${Math.round(Date.now() / 1000 - ts)}s > 7200s) — fallback\n`);
       return askClaude(userMsg, projectKey);
     }
   } catch {
-    process.stdout.write('[ipc] signal illisible — fallback subprocess\n');
+    process.stdout.write('[ipc] signal illisible — fallback\n');
     return askClaude(userMsg, projectKey);
   }
 
@@ -382,10 +385,10 @@ async function askRealClaude(userMsg, projectKey) {
         const response = _rfs(responseFile, 'utf8').trim();
         try { _unlink(responseFile); } catch {}
         resolve(response || '(vide)');
-      } else if (Date.now() - start > 45000) {
-        // 45s sans réponse → fallback subprocess
+      } else if (Date.now() - start > 3000) {
+        // 3s sans réponse → fallback subprocess (IPC fail-fast)
         clearTimeout(ackTimer); clearInterval(heartbeat); clearInterval(poll);
-        process.stdout.write(`[ipc] timeout 45s — fallback subprocess (id=${id})\n`);
+        process.stdout.write(`[ipc] timeout 3s — fallback (msg=${userMsg.length}chars)\n`);
         askClaude(userMsg, projectKey).then(resolve);
       }
     }, 500);
