@@ -51,9 +51,9 @@ statut: prêt à implémenter
 
 ### Pipeline (4 étapes, séquentiel)
 1. **Compose résumé brut** (max ~3000 tokens) avec sections : « Notes du jour », « Sessions Claude », « Commits ».
-2. **Fan-out 2 modèles Ollama** en parallèle :
-   - **DeepSeek-v4-flash:cloud** via Ollama Cloud (modèle distant, voir env `OLLAMA_CLOUD_API_KEY`)
-   - **Qwen3.5:4b** local (`http://localhost:11434/api/generate`)
+2. **Fan-out 2 modèles Ollama** en parallèle (subprocess CLI `ollama run <model>` — pas d'API HTTP custom) :
+   - **DeepSeek-v4-flash:cloud** via Ollama Cloud (modèle distant, auth gérée par le binaire `ollama`)
+   - **Qwen3.5:4b** local (même CLI, modèle local résolu par `ollama`)
    - Chacun reçoit : résumé brut + 3 questions :
      a. Quelle conviction retiens-tu de cette journée ?
      b. Quel red-flag vois-tu (incohérence, dette qui grossit, idée abandonnée sans raison) ?
@@ -67,11 +67,11 @@ statut: prêt à implémenter
 - Pas de rotation auto (Léonor du vendredi peut nettoyer logs > 30 jours)
 
 ### Gestion d'erreurs (degraded modes)
-- **Ollama Cloud down** → continue avec Qwen local seulement (logguer « degraded mode: cloud-only »)
-- **Qwen local down** → continue avec DeepSeek cloud seulement
-- **Les deux down** → échec partiel : bilan écrit avec mention `⚠ Idriss en panne, voir logs`, pas d'appel Sonnet
+- **Ollama Cloud down** → continue avec Qwen local seulement (logguer « degraded mode: local-only »)
+- **Qwen local down** → continue avec DeepSeek cloud seulement (logguer « degraded mode: cloud-only »)
+- **Les deux down** → bilan écrit en brut avec frontmatter `degraded: [cloud, local]`, pas d'appel Sonnet
 - **Sonnet API down** → écrit le brut + les 2 réponses Ollama en l'état (Malik fera la synthèse au matin)
-- **Tout down** → exit 1, launchd retentera le lendemain
+- **Tout down (cloud + local + sonnet)** → bilan minimal écrit avec frontmatter `degraded: [cloud, local, sonnet]` + warning visible, exit 0 (le fichier journal sert d'audit ; launchd ne retente pas un bilan partiel)
 
 ### Critères d'arrêt « ça marche »
 1. `launchctl load com.masterclaude.idriss.plist` ne renvoie pas d'erreur
