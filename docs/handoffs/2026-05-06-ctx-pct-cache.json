@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "subject": "Fix calcul % CTX dans hook model-metrics — cache_read + cache_creation + fenêtre 1M",
+    "date": "2026-05-06",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "14cc573..1e8b536"
+  },
+  "from": {
+    "model": "claude-opus-4-7",
+    "context": "Bug fix sur `hooks/model-metrics.sh` (extraction du % de fenêtre contexte injecté dans l'entête §1 de chaque réponse Claude).\n\n**Symptôme** : entête affichait `0%✅` (vert, OK) alors que la session était objectivement saturée (transcript 4.4MB, plusieurs M tokens en cumul cache). L'utilisateur a flagué : « 0% tu rigoles guignole !!! ».\n\n**Cause racine** : le bloc Python (lignes 164-191 avant fix) lisait uniquement `usage.input_tokens` du dernier tour assistant. Or dans l'API Anthropic, `input_tokens` ne reflète QUE le delta uncached du dernier tour — typiquement 1 à 100 tokens en session longue avec cache hit dominant. Les vrais tokens du contexte sont dans `cache_read_input_tokens` (réutilisés du cache) et `cache_creation_input_tokens` (nouvellement caché). Avec input_tokens=1 et fenêtre 200K, le calcul donnait round(1/200000*100)=0%.\n\n**Second bug** : le diviseur était hardcodé à 200_000 même pour les modèles à fenêtre étendue 1M (suffixe `[1m]` dans l'identifiant, ex. `claude-opus-4-7[1m]`).\n\n**Fix appliqué (commit 1e8b536)** :\n- Somme `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` du dernier tour assistant\n- Détecte la fenêtre via la présence de `[1m]` dans le MODEL_ID passé en argv[2] : 1_000_000 si présent, 200_000 sinon\n- Validation locale sur transcript courant : ancien calcul retournait 0%, nouveau retourne 7% (71K/1M post-compact). Ratio cohérent avec le volume observé.\n\n**Pipeline** : 1 commit, 2 fichiers (hook + manifest sha resync), +16/-9 lignes. Pre-push gate verte (secrets, lint, tests Telegram 26/26, manifest sync, handoff debt).",
+    "question": "Le calcul est-il correct quand `cache_creation_input_tokens` est présent SEUL sans cache_read (premier tour qui amorce le cache) ? Le `last_total = input + cache_read + cache_creation` est-il vraiment représentatif de la fenêtre OCCUPÉE, ou faut-il distinguer entre tokens « actifs dans le contexte » (input + cache_read) et « écrits dans le cache pour réutilisation future » (cache_creation) ? Risque de double-comptage si cache_creation a déjà été inclus dans un tour antérieur via cache_read. Identifiez aussi l'angle mort sur la détection de fenêtre : que faire si Anthropic introduit un suffixe différent (`[2m]`, `[500k]`) ? Le hardcode `'[1m]'` ne tiendra pas.",
+    "filesToRead": [
+      "hooks/model-metrics.sh",
+      ".claude/hooks-manifest.json"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "Review Copilot PR #2 — 2 commentaires inline sur hooks/model-metrics.sh.\n\n1) **Bug critique détection fenêtre 1M** (ligne 195) : la condition `'[1m]' in model` ne peut JAMAIS être vraie ici, car `MODEL` est normalisé en amont par `sed 's/\\[.*$//'` (ligne 40) et le cache `claude-atelier-current-model` écrit par `routing-check.sh` est aussi normalisé. Conséquence : `window` reste à 200_000 même sur Opus 1M, le % CTX est sur-estimé d'un facteur 5, et les seuils 35/50/60 se déclenchent prématurément. Fix : passer le MODEL non normalisé (préserver le suffixe `[1m]`) au bloc Python, ou conserver en parallèle un MODEL_RAW dédié.\n\n2) **Couverture de test absente** (ligne 197) : la nouvelle logique CTX (somme cache_read/cache_creation, fenêtre 1M) n'est pas exercée par `test/hooks.js` — les transcripts générés par `makeTranscript` n'incluent pas de `usage`. La régression passerait inaperçue en CI. Fix : ajouter au moins 1 test qui injecte un transcript avec `message.usage` (input_tokens + cache_read_input_tokens + cache_creation_input_tokens) et vérifie le palier produit (✅/🟡/🔥/🚨), incluant un cas modèle suffixé `[1m]`.",
+    "_instruction": "Champ rempli par Claude après lecture des commentaires GitHub Copilot."
+  },
+  "integration": {
+    "retained_implement": [
+      "FIX hooks/model-metrics.sh : créer `MODEL_RAW` non normalisé (préservant le suffixe `[1m]`) en parallèle du `MODEL` normalisé. `MODEL` continue d'alimenter le tier matching (METRICS Python), `MODEL_RAW` est passé au bloc CTX pour la détection de fenêtre 1M. Manifest sha resynchronisé (586a483c2bb52c5e → 8bc420b8124f2f5b).",
+      "AJOUT test/hooks.js : 4 tests CTX % couvrant — (a) opus [1m] avec cache → ≈9-10% ✅, (b) sonnet 200K mêmes tokens → 48% 🟡 + [CTX-COMPACT], (c) opus [1m] saturé 70% → 🚨 + [CTX-ALERT], (d) input_tokens seul sans cache → calcul correct. 73/73 tests passent."
+    ],
+    "rejected": [],
+    "verdict": "VALIDÉ — les 2 commentaires Copilot étaient pertinents et bloquants. Le commentaire #1 révélait un bug-dans-le-fix : ma première itération aurait été inopérante en production (window toujours = 200K). Le commentaire #2 a permis d'ajouter une régression-net sur la nouvelle logique. Aucun rejet : les deux suggestions sont implémentées telles quelles. PR #2 prête à merger après nouvelle CI verte."
+  }
+}

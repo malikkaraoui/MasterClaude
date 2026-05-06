@@ -462,6 +462,78 @@ test('format role/content (fallback) — sonnet + 5 tours Read → léger surplu
   rmSync(dir, { recursive: true, force: true });
 });
 
+// Helpers pour tests CTX % — usage avec cache_read + cache_creation
+function makeTranscriptWithUsage(dir, turns) {
+  const transcript = resolve(dir, 'session.jsonl');
+  // turns = [{tools:[...], usage:{input_tokens, cache_read_input_tokens, cache_creation_input_tokens}}]
+  const lines = turns.map(({ tools, usage }) =>
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: tools.map((name, i) => ({ type: 'tool_use', id: `t${i}`, name, input: {} })),
+        usage,
+      },
+    }),
+  );
+  writeFileSync(transcript, lines.join('\n'));
+  return transcript;
+}
+
+test('CTX % — opus [1m] : input + cache_read + cache_creation / 1M (≈9% → ✅)', () => {
+  const dir = mkdtempSync(resolve(tmpdir(), 'metrics-ctx-'));
+  // 100 + 90000 + 5000 = 95100 / 1M = 9.51% → arrondi 10% (sous 35 → ✅)
+  const transcript = makeTranscriptWithUsage(dir, [
+    { tools: ['Read'], usage: { input_tokens: 100, cache_read_input_tokens: 90000, cache_creation_input_tokens: 5000 } },
+    { tools: ['Read'], usage: { input_tokens: 100, cache_read_input_tokens: 90000, cache_creation_input_tokens: 5000 } },
+  ]);
+  const r = hook('model-metrics.sh', { transcript_path: transcript, model: 'claude-opus-4-7[1m]' });
+  ok(r.status === 0, 'exit 0');
+  ok(r.stdout.includes('[CTX] fenêtre:'), '[CTX] présent');
+  ok(/\[CTX\] fenêtre: (9|10)%✅/.test(r.stdout), `attendu 9-10%✅, reçu : ${r.stdout.match(/\[CTX\][^\n]*/)?.[0]}`);
+  ok(!r.stdout.includes('[CTX-COMPACT]'), 'pas d\'alerte compact sous 35%');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('CTX % — sonnet 200K : mêmes tokens → 48% (palier 🟡 + alerte compact)', () => {
+  const dir = mkdtempSync(resolve(tmpdir(), 'metrics-ctx-'));
+  // 95100 / 200K = 47.55% → arrondi 48% (≥35 → 🟡 + [CTX-COMPACT])
+  const transcript = makeTranscriptWithUsage(dir, [
+    { tools: ['Read'], usage: { input_tokens: 100, cache_read_input_tokens: 90000, cache_creation_input_tokens: 5000 } },
+    { tools: ['Read'], usage: { input_tokens: 100, cache_read_input_tokens: 90000, cache_creation_input_tokens: 5000 } },
+  ]);
+  const r = hook('model-metrics.sh', { transcript_path: transcript, model: 'claude-sonnet-4-6' });
+  ok(r.status === 0, 'exit 0');
+  ok(/\[CTX\] fenêtre: 4[78]%🟡/.test(r.stdout), `attendu 47-48%🟡, reçu : ${r.stdout.match(/\[CTX\][^\n]*/)?.[0]}`);
+  ok(r.stdout.includes('[CTX-COMPACT]'), 'alerte [CTX-COMPACT] attendue ≥35%');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('CTX % — opus [1m] saturé : palier 🚨 et alerte restart', () => {
+  const dir = mkdtempSync(resolve(tmpdir(), 'metrics-ctx-'));
+  // 700000 / 1M = 70% → 🚨 + [CTX-ALERT]
+  const transcript = makeTranscriptWithUsage(dir, [
+    { tools: ['Read'], usage: { input_tokens: 1000, cache_read_input_tokens: 690000, cache_creation_input_tokens: 9000 } },
+    { tools: ['Read'], usage: { input_tokens: 1000, cache_read_input_tokens: 690000, cache_creation_input_tokens: 9000 } },
+  ]);
+  const r = hook('model-metrics.sh', { transcript_path: transcript, model: 'claude-opus-4-7[1m]' });
+  ok(r.status === 0, 'exit 0');
+  ok(r.stdout.includes('70%🚨'), `attendu 70%🚨, reçu : ${r.stdout.match(/\[CTX\][^\n]*/)?.[0]}`);
+  ok(r.stdout.includes('[CTX-ALERT]'), 'alerte [CTX-ALERT] attendue ≥60%');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('CTX % — input_tokens seul (cache absent) : ne masque pas le calcul', () => {
+  const dir = mkdtempSync(resolve(tmpdir(), 'metrics-ctx-'));
+  // Premier tour sans cache — total = 80000, 200K window → 40% 🟡
+  const transcript = makeTranscriptWithUsage(dir, [
+    { tools: ['Read'], usage: { input_tokens: 80000 } },
+  ]);
+  const r = hook('model-metrics.sh', { transcript_path: transcript, model: 'claude-sonnet-4-6' });
+  ok(r.status === 0, 'exit 0');
+  ok(/\[CTX\] fenêtre: 40%🟡/.test(r.stdout), `attendu 40%🟡, reçu : ${r.stdout.match(/\[CTX\][^\n]*/)?.[0]}`);
+  rmSync(dir, { recursive: true, force: true });
+});
+
 // ─────────────────────────────────────────────────────────────
 // detect-design-need.sh — Séréna auto-proposition
 // ─────────────────────────────────────────────────────────────

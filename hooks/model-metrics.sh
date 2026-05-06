@@ -35,13 +35,18 @@ except: pass
 [ ! -f "$TRANSCRIPT" ] && exit 0
 
 # Résoudre le modèle : live > cache
+# MODEL = identifiant normalisé (sans suffixe [...]) → tier matching opus/haiku/sonnet
+# MODEL_RAW = identifiant brut conservant le suffixe `[1m]` → détection fenêtre 1M (bloc CTX)
 MODEL=""
+MODEL_RAW=""
 if [ -n "$LIVE_MODEL" ]; then
+    MODEL_RAW=$(echo "$LIVE_MODEL" | tr -d '\r\n')
     MODEL=$(echo "$LIVE_MODEL" | sed 's/\[.*$//' | tr -d '\r\n')
 fi
 if [ -z "$MODEL" ]; then
     BASE_TMP="${CLAUDE_ATELIER_TMPDIR:-/tmp}"
     MODEL=$(cat "$BASE_TMP/claude-atelier-current-model" 2>/dev/null | tr -d '\r\n')
+    [ -z "$MODEL_RAW" ] && MODEL_RAW="$MODEL"
 fi
 [ -z "$MODEL" ] && exit 0
 
@@ -158,13 +163,16 @@ if [ -n "$METRICS" ]; then
     echo "$METRICS"
 fi
 
-# Extraction % fenêtre de contexte (input_tokens du dernier tour / 200K)
+# Extraction % fenêtre contexte — somme input + cache_read + cache_creation du DERNIER tour
+# Divisée par la fenêtre réelle (1M pour modèle suffixé [1m], 200K sinon)
+# Bug fix : input_tokens seul ne reflète que l'uncached (~0 quand cache hit) → faux 0%
 CTX_INDICATOR=""
 if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
-  _CTX_PCT=$(python3 - "$TRANSCRIPT" <<'PYEOF'
+  _CTX_PCT=$(python3 - "$TRANSCRIPT" "$MODEL_RAW" <<'PYEOF'
 import sys, json
 path = sys.argv[1]
-last_inp = 0
+model = (sys.argv[2] if len(sys.argv) > 2 else '').lower()
+last_total = 0
 try:
     with open(path, 'r', encoding='utf-8', errors='replace') as f:
         for line in f:
@@ -179,13 +187,17 @@ try:
             elif obj.get('role') == 'assistant':
                 usage = obj.get('usage', {})
             if usage:
-                inp = usage.get('input_tokens', 0) or 0
-                if inp > last_inp:
-                    last_inp = inp
+                inp   = usage.get('input_tokens', 0) or 0
+                cr    = usage.get('cache_read_input_tokens', 0) or 0
+                cc    = usage.get('cache_creation_input_tokens', 0) or 0
+                total = inp + cr + cc
+                if total > 0:
+                    last_total = total
 except Exception:
     pass
-if last_inp > 0:
-    pct = round(last_inp / 200000 * 100)
+window = 1_000_000 if '[1m]' in model else 200_000
+if last_total > 0:
+    pct = round(last_total / window * 100)
     print(pct)
 PYEOF
   )
