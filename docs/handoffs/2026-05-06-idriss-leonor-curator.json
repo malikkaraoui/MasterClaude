@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "subject": "Idriss 🌙 + Léonor 🔭 — agents de bilan/stratégie autonomes (launchd cron)",
+    "date": "2026-05-06",
+    "type": "review",
+    "priority": "moyenne",
+    "reviewedRange": "1bf5cc1eafbbe82397747ea44448a71643b748ed..dacb62deb0bc10c09ce35af922681da1d10cbe7a"
+  },
+  "from": {
+    "model": "claude-opus-4-7",
+    "context": "Deux agents Python lancés par launchd : Idriss (21:05 quotidien) lit notes Obsidian + handoffs + commits multi-repos, fait un fan-out Ollama (deepseek-v4-flash:cloud + qwen3.5:4b local) puis synthétise via claude-sonnet-4-6, écrit ~/Vault/Malik/journal/YYYY-MM-DD-bilan.md. Léonor (vendredi 22:00) lit le vault entier + tous les CLAUDE.md projets + bilans Idriss de la semaine, appelle Sonnet direct (pas de fan-out) avec sanity Qwen optionnel, écrit ~/Vault/Malik/strategie/YYYY-Wnn-leonor.md. Stack : Python 3.13 + venv partagé bin/.shared-venv/ + anthropic SDK + dotenv + pyyaml + pytest. Modes dégradés : tout maillon peut tomber, le fichier sort toujours (frontmatter `degraded` listant les pannes). Plists versionnés mais NON chargés en autonome — Malik valide manuellement via launchctl load. Tests : 35 cas Idriss + 17 Léonor (52/52 verts, ~2s, mockés sur subprocess et anthropic.Anthropic). Branchés à npm test via scripts test:idriss / test:leonor + run-pytest.sh wrapper qui skip silencieusement si venv absent. Kill switches : touch /tmp/idriss-disabled (ou leonor-disabled) → skip silencieux.",
+    "question": "Où ces agents peuvent-ils silencieusement échouer en prod sans que Malik s'en aperçoive ? Cibler spécifiquement : (1) la collecte git multi-repos (subprocess git log avec --since=today, glob /Users/malik/*/) — risque false negatives si un repo est en état inhabituel ; (2) la robustesse du fan-out subprocess vs ollama CLI réellement dispo (timeout 120s, returncode != 0, stderr ignoré) ; (3) le mode dégradé `all KO` — le fichier est-il vraiment toujours écrit avec un contenu utile, ou juste un YAML vide ?",
+    "filesToRead": [
+      "bin/idriss/run.py",
+      "bin/idriss/ollama_client.py",
+      "bin/idriss/inputs.py",
+      "bin/idriss/synthesis.py",
+      "bin/idriss/writer.py",
+      "bin/leonor/run.py",
+      "bin/leonor/inputs.py",
+      "test/idriss/test_degraded_modes.py",
+      "test/idriss/test_run_e2e.py",
+      "test/leonor/test_run_e2e.py"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude",
+      "Hors scope : le launchctl load (Malik fait manuellement après --once réel), le proxy Ollama, le bridge Telegram"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans docs/handoffs/2026-05-06-idriss-leonor-curator.json.\""
+  },
+  "integration": null
+}
