@@ -1,10 +1,5 @@
 // parachute — orchestrateur local pour MasterClaude.
 //
-// Remplace progressivement le bricolage Python+Node+JSON-files par un binaire
-// unique. Étape 1 : persistance des handoffs via API HTTP. Étapes suivantes :
-// bridge Telegram, orchestration de sessions, health pings, migration
-// bipartite via tunnel HTTP plutôt que fichiers /tmp.
-//
 // Usage :
 //
 //	parachute                  # écoute sur 127.0.0.1:4001
@@ -32,6 +27,7 @@ import (
 	"time"
 
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/server"
+	"github.com/malikkaraoui/MasterClaude/parachute/internal/sessions"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/store"
 )
 
@@ -42,7 +38,8 @@ func main() {
 	)
 	flag.Parse()
 
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(logger)
 
 	token := os.Getenv("PARACHUTE_TOKEN")
 
@@ -51,7 +48,9 @@ func main() {
 		log.Fatalf("init store: %v", err)
 	}
 
-	srv := server.New(st, token)
+	mgr := sessions.New(st, logger)
+	srv := server.NewWithSessions(st, token, mgr)
+
 	httpSrv := &http.Server{
 		Addr:              *addr,
 		Handler:           srv.Handler(),
@@ -67,6 +66,25 @@ func main() {
 	}
 	log.Printf("parachute v%s · listen=%s · data=%s · auth=%s", server.Version, *addr, *dataDir, authStatus)
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Watchdog : détecte les sessions mortes toutes les 30s, log + alerte future Telegram.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if dead := mgr.CheckDeadSessions(); len(dead) > 0 {
+					slog.Warn("sessions mortes détectées", "projects", dead)
+				}
+			}
+		}
+	}()
+
 	errCh := make(chan error, 1)
 	go func() {
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -74,19 +92,16 @@ func main() {
 		}
 	}()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
 	select {
 	case err := <-errCh:
 		log.Fatalf("listen: %v", err)
-	case sig := <-stop:
-		log.Printf("signal reçu (%s) — shutdown gracieux…", sig)
+	case <-ctx.Done():
+		log.Printf("signal reçu — shutdown gracieux…")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := httpSrv.Shutdown(ctx); err != nil {
+	if err := httpSrv.Shutdown(shutCtx); err != nil {
 		log.Printf("shutdown: %v", err)
 	}
 	log.Printf("parachute arrêté.")
