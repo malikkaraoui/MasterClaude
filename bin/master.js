@@ -294,17 +294,21 @@ async function pollGitHub() {
   }
 }
 
-// --- Appel claude CLI — RAG memory (top-K échanges pertinents) + --continue ---
+// --- Appel claude CLI — subprocess dans /tmp pour éviter les hooks MasterClaude ---
 async function askClaude(userMsg, projectKey) {
-  const sessionDir = getSessionDir(projectKey);
-  const system = buildSystemPrompt();
+  // Système minimal : pas de vault, pas de hooks destructifs (cwd=/tmp)
+  const systemShort = [
+    'Tu es MasterClaude — assistant IA personnel de Malik.',
+    'Tu réponds en français, de façon directe et concise.',
+    'Malik t\'écrit via Telegram (chat). Ne lui demande jamais de lancer une commande — fais-le toi-même si nécessaire.',
+  ].join('\n');
   const relevant = await memory.retrieve(projectKey, userMsg);
   if (relevant) {
     process.stdout.write(`[memory] ${relevant.length} chars injectés (key=${projectKey})\n`);
   }
   const prompt = relevant
-    ? `${system}\n\n[Mémoire pertinente]\n${relevant}\n\n${userMsg}`
-    : `${system}\n\n${userMsg}`;
+    ? `${systemShort}\n\n[Contexte]\n${relevant}\n\n${userMsg}`
+    : `${systemShort}\n\n${userMsg}`;
   const args = ['--print', '--output-format', 'text', '--dangerously-skip-permissions', '-p', prompt];
   const childEnv = { ...process.env };
   delete childEnv.ANTHROPIC_API_KEY; // Claude Code utilise OAuth Max plan, pas la clé API
@@ -324,7 +328,7 @@ async function askClaude(userMsg, projectKey) {
   }, 60000);
 
   return new Promise((resolve) => {
-    const proc = spawn('claude', args, { cwd: sessionDir, encoding: 'utf8', env: childEnv });
+    const proc = spawn('claude', args, { cwd: '/tmp', encoding: 'utf8', env: childEnv });
     let out = '';
     const cleanup = () => { clearTimeout(ackTimer); clearInterval(heartbeat); clearTimeout(hardKill); };
     // Timeout hard 90s — tue le subprocess et répond avec erreur
