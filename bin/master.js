@@ -240,11 +240,14 @@ const GH_EVENT_ICONS = {
 
 async function pollGitHub() {
   try {
-    const r = spawnSync('gh', ['api', '/users/malikkaraoui/events', '--paginate', '--jq', '.[0:30]'], {
+    const r = spawnSync('gh', ['api', '/users/malikkaraoui/events', '--jq', '.[0:30]'], {
       encoding: 'utf8', timeout: 15000
     });
     if (r.status !== 0 || !r.stdout) return;
-    const events = JSON.parse(r.stdout);
+    // Prendre uniquement la première ligne JSON valide (--paginate concatène plusieurs blocs)
+    const firstLine = r.stdout.trim().split('\n').find(l => l.trim().startsWith('['));
+    if (!firstLine) return;
+    const events = JSON.parse(firstLine);
     if (!Array.isArray(events) || events.length === 0) return;
 
     // Trouver les nouveaux events depuis le dernier ID connu
