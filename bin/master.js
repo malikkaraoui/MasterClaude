@@ -657,12 +657,8 @@ async function routeToClaude(userMsg, projectKey) {
       process.stdout.write(`[ipc] signal stale mais session ${claudePid} vivante — IPC direct\n`);
     } else {
       cleanupSignalFile();
-      process.stdout.write('[ipc] aucune session — auto-wake\n');
-      const woke = await wakeClaudeSession();
-      if (!woke) return '❌ Impossible de démarrer une session Claude. Vérifie Terminal.app et l\'autorisation Automation.';
-      sig = readSessionSignal();
-      if (!sig.valid) return '❌ Session lancée mais signal IPC absent. Réessaie dans quelques secondes.';
-      claudePid = sig.claudePid;
+      process.stdout.write('[ipc] aucune session active — message en veille\n');
+      return '💤 Claude est en veille sur ce Mac. Ton message a été noté — dès qu\'une session s\'ouvre, tu peux renvoyer et j\'y réponds directement.';
     }
   }
 
