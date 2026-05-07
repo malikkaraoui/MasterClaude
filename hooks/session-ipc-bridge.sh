@@ -101,24 +101,13 @@ if orphans:
         for o in orphans
     )
     ctx = (
-        "BRIDGE TELEGRAM — RÉVEIL DE SESSION.\n\n"
-        f"{len(orphans)} message(s) Telegram orphelin(s) en attente (sans réponse écrite). "
-        "Tu dois les traiter EN PREMIER, AVANT toute autre action :\n"
+        "BRIDGE TELEGRAM — Messages orphelins détectés.\n\n"
+        f"{len(orphans)} message(s) Telegram en attente (sans réponse) :\n"
         f"{listing}\n\n"
-        "Pour CHAQUE message, écris ta réponse dans /tmp/tg-responses/<id>.txt — "
-        "master.js poll ce fichier et le renvoie sur Telegram.\n\n"
-        "PUIS, et seulement après, lance le Monitor tool : "
-        f"tail -f -n 0 {inbox_path} (persistent=true). "
-        "Il streamera les futurs messages. Tu n'as pas besoin de demander confirmation à Malik."
+        "Pour CHAQUE message, écris ta réponse dans /tmp/tg-responses/<id>.txt"
     )
 else:
-    ctx = (
-        "BRIDGE TELEGRAM — Aucun message orphelin. "
-        "OBLIGATION ABSOLUE — PRIORITÉ MAXIMALE : "
-        f"lance IMMÉDIATEMENT le Monitor tool sur le fichier {inbox_path} avec la commande "
-        "tail -f -n 0 (persistent=true). Sans Monitor, le bridge Telegram ne fonctionne pas. "
-        "Ne réponds pas avant d'avoir lancé ce Monitor."
-    )
+    ctx = "BRIDGE TELEGRAM — Aucun message orphelin."
 
 print(json.dumps({
     "hookSpecificOutput": {
