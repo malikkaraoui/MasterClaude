@@ -1,0 +1,30 @@
+{
+  "meta": {
+    "subject": "master.js — escalade compact×3→migrate, filtrage spam GitHub, reset ctx SessionStart",
+    "date": "2026-05-07",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "3c7d3da..831bd0f"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "7 commits feat/fix sur bin/master.js et hooks/session-ipc-bridge.sh :\n- 7425e80 feat(session): active-todos injectés à chaque SessionStart via IPC bridge\n- 9060f51 fix: appliquer review Copilot PR #7 — todos slug dynamique + limite contexte\n- aea6c80 fix(ipc-bridge): singleton ne tue plus les Monitor de sessions Claude parallèles\n- 6355a41 fix(handoff-debt): résoudre faux-positif §25 sur SHAs orphelins post-rebase\n- cc8b4ab fix(master): demander permission avant compact + filtrer spam GitHub\n- 64a491c fix(master): réinitialiser ctx-pct + compact-pending au SessionStart\n- 831bd0f feat(master): escalade compact×3 → migrate (paquetage + kill + nouvelle session)\n\nLogique clé ajoutée dans routeToClaude :\n1. Intercept OUI/NON depuis Telegram (COMPACT_PENDING_FILE JSON)\n2. ctx ≥ 60% + compactCount < 3 → demander permission /compact via osascript\n3. ctx ≥ 60% + compactCount ≥ 3 → demander permission migrate (executeMigration = handoff + kill + wake)\n4. Compteur compact remis à 0 au SessionStart (hooks/session-ipc-bridge.sh)\n5. pollGitHub filtre désormais : DeleteEvent, PushEvent 0 commits, branches handoff/",
+    "question": "Le flow OUI/NON dans routeToClaude est-il robuste face aux cas limites : (a) deux messages Telegram rapides (race condition sur COMPACT_PENDING_FILE), (b) claudePid null dans le JSON pending lors d'un migrate (executeMigration reçoit null → restartSession ne sait pas quoi killer), (c) le compteur compact ne se reset pas si la session crash sans passer par SessionStart ?",
+    "filesToRead": [
+      "bin/master.js",
+      "hooks/session-ipc-bridge.sh"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
