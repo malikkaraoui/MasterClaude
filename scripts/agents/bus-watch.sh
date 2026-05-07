@@ -10,7 +10,8 @@ while true; do
     echo "  BUS AGENTS — $(date '+%H:%M:%S')"
     echo "═══════════════════════════════════════"
 
-    for inbox in "$BUS"/*-inbox.jsonl 2>/dev/null; do
+    shopt -s nullglob
+    for inbox in "$BUS"/*-inbox.jsonl; do
         [[ -f "$inbox" ]] || continue
         agent=$(basename "$inbox" "-inbox.jsonl")
         outbox="$BUS/${agent}-outbox.jsonl"
