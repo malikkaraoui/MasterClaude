@@ -51,10 +51,12 @@ echo "[IPC-BRIDGE] Signal créé : $SIGNAL_FILE (shell=$$, parent=$PPID, TTL=10m
 # qui ont déclenché le réveil de cette session. On identifie ces orphelins et on les
 # injecte dans additionalContext pour que Claude les traite EN PREMIER.
 # Fenêtre : 10 min, max 5 messages (évite explosion de contexte sur grosse inbox).
-python3 - "$INBOX_FILE" "$RESPONSE_DIR" <<'PY'
-import json, os, sys, time
+ACTIVE_TODOS_FILE="$HOME/.claude/projects/-Users-malik-MasterClaude/memory/active-todos.md"
 
-inbox_path, resp_dir = sys.argv[1], sys.argv[2]
+python3 - "$INBOX_FILE" "$RESPONSE_DIR" "$ACTIVE_TODOS_FILE" <<'PY'
+import json, os, sys, time, re
+
+inbox_path, resp_dir, todos_path = sys.argv[1], sys.argv[2], sys.argv[3]
 now_ms = int(time.time() * 1000)
 WINDOW_MS = 10 * 60 * 1000
 MAX = 5
@@ -116,6 +118,25 @@ else:
         "  timeout_ms: 3600000\n\n"
         "Ce Monitor est le seul canal de réception des messages Telegram via IPC. "
         "Sans lui, master.js écrit dans l'inbox mais rien n'est lu."
+    )
+
+# === Active todos ===
+pending_todos = []
+try:
+    with open(todos_path) as f:
+        for line in f:
+            m = re.match(r'^\s*-\s*\[\s*\]\s*(.+)', line)
+            if m:
+                pending_todos.append(m.group(1).strip())
+except Exception:
+    pass
+
+if pending_todos:
+    todos_block = "\n".join(f"  - [ ] {t}" for t in pending_todos)
+    ctx += (
+        "\n\n⚠️ ACTIVE TODOS (promesses non honorées) :\n"
+        f"{todos_block}\n"
+        "→ Si terminé : cocher dans active-todos.md ET confirmer sur Telegram."
     )
 
 print(json.dumps({
