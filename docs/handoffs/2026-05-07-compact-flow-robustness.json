@@ -4,7 +4,7 @@
     "date": "2026-05-07",
     "type": "review",
     "priority": "haute",
-    "reviewedRange": "831bd0f..37bac27"
+    "reviewedRange": "831bd0f..b14f183"
   },
   "from": {
     "model": "claude-sonnet-4-6",
