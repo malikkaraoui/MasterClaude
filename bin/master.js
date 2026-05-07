@@ -356,6 +356,15 @@ async function pollGitHub() {
 
     // Envoyer les nouvelles notifs (plus récent en dernier = ordre chronologique)
     for (const ev of newEvents.reverse()) {
+      // Filtrer le bruit : suppressions, push vides, branches handoff/
+      if (ev.type === 'DeleteEvent') continue;
+      if (ev.type === 'PushEvent') {
+        const commits = ev.payload?.commits || [];
+        const branch = ev.payload?.ref?.replace('refs/heads/', '') || '';
+        if (commits.length === 0) continue;
+        if (branch.startsWith('handoff/')) continue;
+      }
+
       const icon = GH_EVENT_ICONS[ev.type] || '📋';
       const repo = ev.repo?.name || '?';
       let detail = '';
@@ -385,7 +394,8 @@ async function pollGitHub() {
 
 // --- Helpers : ctx%, PID alive, kill propre ---
 const CTX_PCT_FILE = '/tmp/masterclaude-ctx-pct';
-const CTX_RESTART_THRESHOLD = 60; // % au-delà duquel on relance la session
+const CTX_RESTART_THRESHOLD = 60; // % au-delà duquel on demande permission compact
+const COMPACT_PENDING_FILE = '/tmp/masterclaude-compact-pending';
 
 function getCtxPct() {
   try {
@@ -457,6 +467,30 @@ function readWakeLock() {
     }
     return ts;
   } catch { return null; }
+}
+
+// Envoie /compact dans la fenêtre Terminal nommée "MasterClaude" via osascript
+async function compactExistingWindow() {
+  const script = `tell application "Terminal"
+  repeat with w in windows
+    if name of w contains "MasterClaude" then
+      set index of w to 1
+      exit repeat
+    end if
+  end repeat
+end tell
+delay 0.3
+tell application "System Events"
+  tell process "Terminal"
+    keystroke "u" using control down
+    delay 0.1
+    keystroke "/compact"
+    delay 0.1
+    key code 36
+  end tell
+end tell`;
+  const r = spawnSync('osascript', ['-e', script], { encoding: 'utf8', timeout: 10000 });
+  return r.status === 0;
 }
 
 async function wakeClaudeSession() {
@@ -641,6 +675,24 @@ async function executeMigration(claudePid, projectKey, reason) {
 // Garanties : (1) jamais de subprocess fantôme, (2) auto-wake si pas de session,
 // (3) restart auto si ctx >= 60% APRÈS la réponse au tour courant.
 async function routeToClaude(userMsg, projectKey) {
+  // Intercept OUI/NON si un /compact était en attente de validation
+  if (_exists(COMPACT_PENDING_FILE)) {
+    const normalized = userMsg.trim().toUpperCase();
+    if (normalized === 'OUI' || normalized === 'NON') {
+      let ctxPct = '?';
+      try { ctxPct = _rfs(COMPACT_PENDING_FILE, 'utf8').trim(); } catch {}
+      try { _unlink(COMPACT_PENDING_FILE); } catch {}
+      if (normalized === 'OUI') {
+        const ok = await compactExistingWindow();
+        return ok
+          ? `✅ /compact envoyé dans la fenêtre MasterClaude (ctx était ${ctxPct}%).`
+          : `❌ osascript échoué — autorise Terminal.app dans Réglages → Confidentialité → Automation.`;
+      } else {
+        return `👌 OK, je reste en place. Contexte à ${ctxPct}%.`;
+      }
+    }
+  }
+
   // Étape 1 — assurer une session active. Trois cas :
   //   (a) signal IPC valide → utiliser claudePid pour restart features
   //   (b) signal stale MAIS un process `claude` tourne → écrire dans inbox quand même
@@ -662,12 +714,13 @@ async function routeToClaude(userMsg, projectKey) {
     }
   }
 
-  // Étape 2 — détecter saturation contexte (restart APRÈS la réponse, pas pendant)
+  // Étape 2 — détecter saturation contexte → demander permission (jamais auto-restart)
   const ctxPct = getCtxPct();
-  let pendingRestart = false;
-  if (ctxPct >= CTX_RESTART_THRESHOLD) {
-    pendingRestart = true;
-    await send(`🔄 Contexte ${ctxPct}% (≥ ${CTX_RESTART_THRESHOLD}%) — je relance Claude juste après cette réponse.`).catch(() => {});
+  if (ctxPct >= CTX_RESTART_THRESHOLD && !_exists(COMPACT_PENDING_FILE)) {
+    try { _wfs(COMPACT_PENDING_FILE, `${ctxPct}\n`); } catch {}
+    // Auto-expire après 5 min si pas de réponse
+    setTimeout(() => { try { _unlink(COMPACT_PENDING_FILE); } catch {} }, 5 * 60 * 1000);
+    await send(`⚠️ Contexte à ${ctxPct}% (≥ ${CTX_RESTART_THRESHOLD}%) — je /compact dans la fenêtre existante ? (réponds OUI ou NON, timeout 5 min)`).catch(() => {});
   }
 
   // Étape 3 — dispatch via IPC (fichier inbox + polling response file)
@@ -720,15 +773,6 @@ async function routeToClaude(userMsg, projectKey) {
       }
     }, 500);
   });
-
-  // Étape 5 — restart différé après livraison de la réponse au user
-  if (pendingRestart) {
-    setImmediate(() => {
-      restartSession(claudePid, ctxPct).catch(e =>
-        process.stderr.write(`[restart] erreur: ${e.message}\n`)
-      );
-    });
-  }
 
   return response;
 }
