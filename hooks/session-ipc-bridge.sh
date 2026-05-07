@@ -107,7 +107,16 @@ if orphans:
         "Pour CHAQUE message, écris ta réponse dans /tmp/tg-responses/<id>.txt"
     )
 else:
-    ctx = "BRIDGE TELEGRAM — Aucun message orphelin."
+    ctx = (
+        "BRIDGE TELEGRAM — Aucun message orphelin.\n\n"
+        "ACTION OBLIGATOIRE : lance le Monitor sur l'inbox Telegram avant tout traitement :\n"
+        f"  command: tail -f -n 0 /tmp/tg-inbox.jsonl\n"
+        "  description: Telegram inbox bridge\n"
+        "  persistent: true\n"
+        "  timeout_ms: 3600000\n\n"
+        "Ce Monitor est le seul canal de réception des messages Telegram via IPC. "
+        "Sans lui, master.js écrit dans l'inbox mais rien n'est lu."
+    )
 
 print(json.dumps({
     "hookSpecificOutput": {

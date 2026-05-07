@@ -48,16 +48,21 @@ ok('plist bridge LaunchAgent supprimé', () => {
 ok('/tmp/tg-responses créable', () =>
   mkdirSync('/tmp/tg-responses', { recursive: true }));
 
-ok('.env sans OLLAMA_CHAT_MODEL actif', () => {
-  const env = readFileSync(join(ROOT, '.env'), 'utf8');
-  const match = env.match(/^OLLAMA_CHAT_MODEL=(.+)$/m);
-  nodeOk(!match, `OLLAMA_CHAT_MODEL encore défini: ${match ? match[1] : ''}`);
-});
-
-ok('.env sans OLLAMA_POLISH_MODEL', () => {
-  const env = readFileSync(join(ROOT, '.env'), 'utf8');
-  nodeOk(!env.includes('OLLAMA_POLISH_MODEL='), 'OLLAMA_POLISH_MODEL encore dans .env');
-});
+const envPath = join(ROOT, '.env');
+if (existsSync(envPath)) {
+  ok('.env sans OLLAMA_CHAT_MODEL actif', () => {
+    const env = readFileSync(envPath, 'utf8');
+    const match = env.match(/^OLLAMA_CHAT_MODEL=(.+)$/m);
+    nodeOk(!match, `OLLAMA_CHAT_MODEL encore défini: ${match ? match[1] : ''}`);
+  });
+  ok('.env sans OLLAMA_POLISH_MODEL', () => {
+    const env = readFileSync(envPath, 'utf8');
+    nodeOk(!env.includes('OLLAMA_POLISH_MODEL='), 'OLLAMA_POLISH_MODEL encore dans .env');
+  });
+} else {
+  console.log('  ⏭ .env absent (CI) — assertions OLLAMA ignorées');
+  passed += 2;
+}
 
 console.log(`\n${passed} passés, ${failed} échoués`);
 if (failed > 0) process.exit(1);

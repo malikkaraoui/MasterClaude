@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "date": "2026-05-07",
+    "type": "review",
+    "subject": "Copilot review PR #6 — parachute-ipc-telegram-consolidation",
+    "reviewedRange": "afb39facdc16ef8a06ddae93bae24d3f70fe1453..ad70d406730abf905bec1eb531a3c3b5d64c8470",
+    "priority": "haute"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Handoff review 30 commits parachute Go + IPC Telegram consolidé. Question : scénarios de perte de message non couverts par les filets IPC actuels.",
+    "question": "Le flux IPC master.js → /tmp/tg-inbox.jsonl → Monitor Claude → /tmp/tg-responses/<id>.txt est le seul chemin critique. Quels sont les scénarios de perte non couverts, en particulier autour du redémarrage daemon ou d'un /compact en cours ?",
+    "filesToRead": [
+      "bin/master.js",
+      "hooks/session-ipc-bridge.sh",
+      "hooks/guard-monitor-bridge.sh",
+      "parachute/main.go",
+      "parachute/sessions/manager.go"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "Trois scénarios de perte identifiés :\n\n1. **Monitor absent au démarrage de session** (hooks/session-ipc-bridge.sh L110) : le hook SessionStart n'injectait pas l'instruction Monitor quand aucun orphelin n'était détecté. Une session démarrée post-/compact ou post-restart n'avait donc pas de Monitor actif. master.js écrit dans l'inbox → timeout Telegram → accumulation d'orphelins silencieux jusqu'au prochain SessionStart. Fix : réintroduire la consigne Monitor dans additionalContext même sans orphelins.\n\n2. **Syntaxe bash invalide dans bus-watch.sh** (scripts/agents/bus-watch.sh L13) : `for inbox in \"$BUS\"/*-inbox.jsonl 2>/dev/null` est invalide — la redirection ne porte pas sur un compound command. Le script ne démarre pas, empêchant toute surveillance du bus agents. Fix : `shopt -s nullglob` + boucle sans redirection.\n\n3. **Test .env non conditionnel** (test/ipc.test.js L60) : `readFileSync('.env')` sans vérification d'existence échoue en CI où .env n'est pas commité, rendant `npm test` non reproductible. Fix : conditionner les assertions à `existsSync('.env')`."
+  },
+  "integration": {
+    "retained_implement": [
+      "Fix session-ipc-bridge.sh : injection instruction Monitor même sans orphelins (cas post-/compact couverts)",
+      "Fix bus-watch.sh : shopt -s nullglob pour syntaxe for loop valide",
+      "Fix test/ipc.test.js : assertions .env conditionnelles à existsSync"
+    ],
+    "verdict": "Les trois issues Copilot sont légitimes et critiques : le Monitor manquant causait des pertes de messages silencieuses (scénario le plus dangereux en prod), le script de bus était cassé dès le lancement, et les tests étaient fragiles en CI. Tous les fixes ont été appliqués et les tests passent à 10/10."
+  }
+}
