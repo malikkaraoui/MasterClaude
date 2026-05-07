@@ -444,7 +444,7 @@ function readSessionSignal() {
     if (ageS > 600) return { valid: false, ageS, claudePid };
     if (!isPidAlive(claudePid)) {
       process.stdout.write(`[ipc] signal vivant mais PID=${claudePid} mort — invalidation\n`);
-      resetCompactCount(claudePid);
+      resetCompactCount(claudePid); // side-effect intentionnel : chemin erreur uniquement
       return { valid: false, ageS, claudePid };
     }
     return { valid: true, ageS, claudePid };
@@ -957,6 +957,8 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', () => { running = false; cleanupSignalFile(); process.exit(0); });
 
 process.stdout.write(`[master] démarré PID=${process.pid} vault=${VAULT_PATH}\n`);
+// Reset du legacy compact-count au boot — évite valeur stale si session précédente a crashé
+try { _wfs(COMPACT_COUNT_FILE, '0\n'); } catch {}
 ensureTranscribeDaemon();
 setInterval(pollParachuteAlerts, 30000);
 
