@@ -368,7 +368,7 @@
       "exitCodes": {
         "0": "always (setup only, never blocks)"
       },
-      "sha256": "2a1d9320abb91e1e"
+      "sha256": "92360b54c314147e"
     },
     {
       "name": "peter-inbox-check",
