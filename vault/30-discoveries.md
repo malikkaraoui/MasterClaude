@@ -55,4 +55,28 @@ Ce que Claude ou Peter apprend sur le projet et qui mérite de survivre à la se
 - **Impact** : régression structurelle éliminée. Validé en live (le bridge a survécu un `/compact` après installation).
 - **Limite** : ne corrige pas la fragilité du master daemon ni le polling de la queue `/tmp/tg-responses/`. C'est l'objet de `parachute`.
 
+### 2026-05-07 — osascript + System Events : primitives inter-agent et auto-agent validées
+
+- **Défi** : contrôler des sessions Claude Code dans d'autres fenêtres Terminal macOS — sans intervention humaine.
+- **Auto-agent** : MasterClaude écrit un script osascript en arrière-plan (`sleep 12 && osascript`) → `System Events` trouve la fenêtre par titre (`name contains "MasterClaude"`) → envoie Ctrl+U + `/compact` + Enter. Résultat : `/compact` déclenché dans la propre fenêtre de MasterClaude sans que Malik touche le clavier. ✅
+- **Inter-agent** : tom-protocol se compacte → son `SessionStart` hook envoie un signal → MasterClaude se compacte en cascade. Deux sessions compactées sans intervention humaine. ✅
+- **Pattern clé** :
+  ```applescript
+  tell application "Terminal"
+    repeat with w in windows
+      if name of w contains "MasterClaude" then set index of w to 1
+    end repeat
+  end tell
+  delay 0.3
+  tell application "System Events"
+    tell process "Terminal"
+      keystroke "u" using control down
+      keystroke "/compact"
+      key code 36
+    end tell
+  end tell
+  ```
+- **Impact** : socle du parachute orchestrator — MasterClaude peut piloter n'importe quelle fenêtre Terminal, envoyer des commandes, déclencher des actions sur d'autres agents Claude Code. JAMAIS dire "impossible" pour une action Terminal macOS.
+- **Prochain usage** : déclencher `/compact`, changer de modèle, lancer une feature, lire l'output en live — sur n'importe quelle session.
+
 ### YYYY-MM-DD — Découverte
