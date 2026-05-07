@@ -51,7 +51,9 @@ echo "[IPC-BRIDGE] Signal créé : $SIGNAL_FILE (shell=$$, parent=$PPID, TTL=10m
 # qui ont déclenché le réveil de cette session. On identifie ces orphelins et on les
 # injecte dans additionalContext pour que Claude les traite EN PREMIER.
 # Fenêtre : 10 min, max 5 messages (évite explosion de contexte sur grosse inbox).
-ACTIVE_TODOS_FILE="$HOME/.claude/projects/-Users-malik-MasterClaude/memory/active-todos.md"
+# Construire le slug dynamiquement depuis le répertoire courant (portable inter-machines)
+_PROJECT_SLUG=$(python3 -c "import os; p=os.path.realpath('$PWD'); print('-' + p.replace('/', '-'))" 2>/dev/null || echo "-Users-malik-MasterClaude")
+ACTIVE_TODOS_FILE="$HOME/.claude/projects/${_PROJECT_SLUG}/memory/active-todos.md"
 
 python3 - "$INBOX_FILE" "$RESPONSE_DIR" "$ACTIVE_TODOS_FILE" <<'PY'
 import json, os, sys, time, re
@@ -121,6 +123,8 @@ else:
     )
 
 # === Active todos ===
+MAX_TODOS = 10
+TODOS_CHAR_BUDGET = 500
 pending_todos = []
 try:
     with open(todos_path) as f:
@@ -132,10 +136,16 @@ except Exception:
     pass
 
 if pending_todos:
-    todos_block = "\n".join(f"  - [ ] {t}" for t in pending_todos)
+    truncated = len(pending_todos) > MAX_TODOS
+    visible = pending_todos[:MAX_TODOS]
+    todos_block = "\n".join(f"  - [ ] {t}" for t in visible)
+    if len(todos_block) > TODOS_CHAR_BUDGET:
+        todos_block = todos_block[:TODOS_CHAR_BUDGET] + "\n  …"
+        truncated = True
+    suffix = f"\n  … ({len(pending_todos) - MAX_TODOS} de plus)" if truncated and len(pending_todos) > MAX_TODOS else ""
     ctx += (
         "\n\n⚠️ ACTIVE TODOS (promesses non honorées) :\n"
-        f"{todos_block}\n"
+        f"{todos_block}{suffix}\n"
         "→ Si terminé : cocher dans active-todos.md ET confirmer sur Telegram."
     )
 
