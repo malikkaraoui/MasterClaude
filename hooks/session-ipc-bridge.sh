@@ -14,6 +14,10 @@ MONITOR_PIDS_FILE="/tmp/masterclaude-monitor-pids"
 mkdir -p "$RESPONSE_DIR"
 touch "$INBOX_FILE"
 
+# Remettre à zéro le ctx% au boot — évite que master.js lise une valeur stale
+echo "0" > /tmp/masterclaude-ctx-pct 2>/dev/null || true
+rm -f /tmp/masterclaude-compact-pending 2>/dev/null || true
+
 # === Singleton — tuer les Monitor zombies sur tg-inbox.jsonl ===
 # Ne tuer QUE les tails orphelins (parent mort) — jamais les tails de sessions Claude vivantes.
 OLD_TAILS=$(pgrep -f "tail -f .* /tmp/tg-inbox.jsonl" 2>/dev/null | tr '\n' ' ')
