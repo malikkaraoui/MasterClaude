@@ -15,14 +15,20 @@ mkdir -p "$RESPONSE_DIR"
 touch "$INBOX_FILE"
 
 # === Singleton — tuer les Monitor zombies sur tg-inbox.jsonl ===
-# Cible précise : `tail -f -n 0 /tmp/tg-inbox.jsonl` lancé par d'anciennes sessions Claude.
-# Critère strict pour ne pas frapper le tail courant (qui n'existe pas encore au SessionStart).
+# Ne tuer QUE les tails orphelins (parent mort) — jamais les tails de sessions Claude vivantes.
 OLD_TAILS=$(pgrep -f "tail -f .* /tmp/tg-inbox.jsonl" 2>/dev/null | tr '\n' ' ')
+KILLED=""
 if [ -n "$OLD_TAILS" ]; then
   for pid in $OLD_TAILS; do
-    [ "$pid" != "$$" ] && kill -TERM "$pid" 2>/dev/null
+    [ "$pid" = "$$" ] && continue
+    TAIL_PPID=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ')
+    # Si le parent est encore vivant → tail d'une session Claude active → ne pas tuer
+    if [ -n "$TAIL_PPID" ] && kill -0 "$TAIL_PPID" 2>/dev/null; then
+      continue
+    fi
+    kill -TERM "$pid" 2>/dev/null && KILLED="$KILLED $pid"
   done
-  echo "[IPC-BRIDGE] Anciens Monitor tail tués : $OLD_TAILS" >&2
+  [ -n "$KILLED" ] && echo "[IPC-BRIDGE] Monitor zombies tués (parent mort) :$KILLED" >&2
 fi
 
 # === Signal file : timestamp + PID shell + PID parent (Claude Code) ===
