@@ -115,22 +115,57 @@ except Exception:
     # (pas à chaque candidat → 59 validations → 1 validation)
     if [[ $CONTENT_LEN -gt 100 ]] && [[ "$REVIEWED_RANGE" =~ ^[a-f0-9]{7,40}\.\.[a-f0-9]{7,40}$ ]]; then
       TO_SHA="${REVIEWED_RANGE##*..}"
-      # Garder le sha le plus récent dans git (descendant du sha courant)
+      SHA_IN_GIT=$(git -C "$REPO_ROOT" cat-file -e "${TO_SHA}" 2>/dev/null && echo 1 || echo 0)
+      LATEST_IN_GIT=0
+      [[ -n "$LATEST_SHA" ]] && LATEST_IN_GIT=$(git -C "$REPO_ROOT" cat-file -e "${LATEST_SHA}" 2>/dev/null && echo 1 || echo 0)
       if [[ -z "$LATEST_SHA" ]]; then
         LATEST_INTEGRATED="$f"
         LATEST_SHA="$TO_SHA"
-      elif git -C "$REPO_ROOT" merge-base --is-ancestor "$LATEST_SHA" "$TO_SHA" 2>/dev/null; then
-        # TO_SHA est plus récent que LATEST_SHA → remplacer
+      elif [[ "$SHA_IN_GIT" == "1" && "$LATEST_IN_GIT" == "0" ]]; then
+        # Candidat dans git, LATEST est orphelin → candidat gagne
         LATEST_INTEGRATED="$f"
         LATEST_SHA="$TO_SHA"
+      elif [[ "$SHA_IN_GIT" == "1" && "$LATEST_IN_GIT" == "1" ]] && \
+           git -C "$REPO_ROOT" merge-base --is-ancestor "$LATEST_SHA" "$TO_SHA" 2>/dev/null; then
+        # Les deux dans git → comparaison ancêtre classique
+        LATEST_INTEGRATED="$f"
+        LATEST_SHA="$TO_SHA"
+      else
+        # Les deux orphelins ou candidat orphelin → comparaison par date de fichier
+        CURR_DATE=$(basename "$LATEST_INTEGRATED" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}' || echo "0000-00-00")
+        CAND_DATE=$(basename "$f" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}' || echo "0000-00-00")
+        if [[ "$CAND_DATE" > "$CURR_DATE" ]] || [[ "$CAND_DATE" == "$CURR_DATE" && "$f" > "$LATEST_INTEGRATED" ]]; then
+          LATEST_INTEGRATED="$f"
+          LATEST_SHA="$TO_SHA"
+        fi
       fi
     fi
   done
 
-  # Validation structurelle du vainqueur uniquement (1 appel au lieu de N)
-  if [[ -n "$LATEST_INTEGRATED" ]] && ! validate_handoff_with_timeout "$LATEST_INTEGRATED"; then
-    LATEST_INTEGRATED=""
-    LATEST_SHA=""
+  # Validation légère : vérifier que l'intégration a du contenu (JSON) ou section non vide (MD)
+  if [[ -n "$LATEST_INTEGRATED" ]]; then
+    if [[ "$LATEST_INTEGRATED" == *.json ]]; then
+      INTEG_OK=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$LATEST_INTEGRATED'))
+    integ = d.get('integration') or {}
+    retained = integ.get('retained_implement', [])
+    verdict = integ.get('verdict', '')
+    rr = (d.get('from') or {}).get('question', '') or (d.get('meta') or {}).get('subject', '')
+    ok = (len(retained) > 0 or len(verdict) > 50) and len(rr) > 10
+    print('1' if ok else '0')
+except Exception:
+    print('0')
+" 2>/dev/null || echo "0")
+    else
+      # Fichier MD — CONTENT_LEN > 100 est suffisant (vérifié dans la boucle)
+      INTEG_OK=1
+    fi
+    if [[ "$INTEG_OK" != "1" ]]; then
+      LATEST_INTEGRATED=""
+      LATEST_SHA=""
+    fi
   fi
 fi
 
@@ -161,6 +196,21 @@ fi
 # Jours depuis le dernier handoff intégré
 if [[ -n "$LATEST_SHA" ]]; then
   HANDOFF_DATE=$(git -C "$REPO_ROOT" log -1 --format=%ct "$LATEST_SHA" 2>/dev/null || echo 0)
+  # Fallback sur meta.date si SHA rebasé (non ancêtre de HEAD — rebase merge)
+  if [[ "$HANDOFF_DATE" -eq 0 ]] && [[ -n "$LATEST_INTEGRATED" ]]; then
+    META_DATE=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$LATEST_INTEGRATED'))
+    print(d.get('meta', {}).get('date', ''))
+except Exception:
+    print('')
+" 2>/dev/null)
+    if [[ "$META_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+      HANDOFF_DATE=$(date -j -f "%Y-%m-%d" "$META_DATE" "+%s" 2>/dev/null \
+                    || date -d "$META_DATE" "+%s" 2>/dev/null || echo 0)
+    fi
+  fi
   NOW=$(date +%s)
   DAYS_SINCE=$(( (NOW - HANDOFF_DATE) / 86400 ))
 else
