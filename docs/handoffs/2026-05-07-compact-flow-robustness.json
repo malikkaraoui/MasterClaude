@@ -1,0 +1,30 @@
+{
+  "meta": {
+    "subject": "master.js — robustesse flow compact/migrate : guard claudePid + compact-count par PID + blocage non-OUI/NON",
+    "date": "2026-05-07",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "831bd0f..37bac27"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "2 commits fix sur bin/master.js et hooks/session-ipc-bridge.sh :\n- c244495 fix: intégrer review Copilot #8 — 3 cas limites OUI/NON compact/migrate\n- 37bac27 fix(master): robustesse flow OUI/NON — guard claudePid, compact-count par PID, blocage messages hors OUI/NON\n\nDétail des changements :\n1. _compactCountPath(pid) : fichier /tmp/masterclaude-compact-count.<pid> rattaché au PID de session (évite valeurs stale post-crash)\n2. getCompactCount/incrCompactCount/resetCompactCount acceptent pid comme paramètre\n3. Guard claudePid avant executeMigration : si null/mort → readSessionSignal() fallback → findExistingClaudeSession() → abort avec message Telegram\n4. Blocage messages hors OUI/NON pendant pending valide : rappel Telegram + return '' sans dispatcher à Claude\n5. Reset compact-count dans readSessionSignal() quand PID mort, après migration réussie\n6. hooks/session-ipc-bridge.sh : écrit aussi dans /tmp/masterclaude-compact-count.$PPID au SessionStart\n7. Reset legacy compact-count au boot daemon (avant ensureTranscribeDaemon)",
+    "question": "Le reset du compact-count dans readSessionSignal() est-il safe dans tous les chemins d'appel ? En particulier : (a) readSessionSignal() est appelée dans /health, /migrate et routeToClaude — le side-effect de reset peut-il provoquer une perte de comptage si appelée en dehors du chemin PID-mort ? (b) Le blocage non-OUI/NON avec return '' est-il correctement absorbé par la boucle poll Telegram sans provoquer un ack manquant ou une double réponse ? (c) Si le daemon redémarre à froid et que /tmp/masterclaude-compact-count existe déjà avec une valeur stale d'une session précédente, le reset au boot (avant ensureTranscribeDaemon) est-il suffisant ou peut-il y avoir une fenêtre de race entre le reset legacy et la lecture PID-spécifique ?",
+    "filesToRead": [
+      "bin/master.js",
+      "hooks/session-ipc-bridge.sh"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
