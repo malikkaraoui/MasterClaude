@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "subject": "Parachute Go orchestrateur + IPC Telegram consolidé + nettoyage bridge Python",
+    "date": "2026-05-07",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "afb39facdc16ef8a06ddae93bae24d3f70fe1453..33e93d9fd975ffe0eac57347c21215adcf4bcc68"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "30 commits, +4989/-1405 lignes. Deux axes majeurs :\n\n1. PARACHUTE Go (orchestrateur de sessions Claude) :\n   - feat(parachute): daemon Go v0.1.0 — store SQLite + API HTTP REST\n   - feat(sessions): manager spawn/kill/heartbeat/watchdog (Étape 3)\n   - feat(vault): loader — injection Vault Malik au spawn session (Étape 3b)\n   - feat(health): checker — ping composants + alerte Telegram si down >2 cycles (Étape 4)\n   - feat(migrate): handler Unix socket POST /v1/migrate — handoff push + kill + spawn (Étape 5)\n   - feat(main): wire sessions manager + migrate handler + graceful shutdown (Étapes 4-6)\n   - feat(parachute): Étape 7 — cc-parachute CLI, WebUI /dashboard Go-embed, backup quotidien tar.gz\n   - fix(parachute): path traversal + PARACHUTE_VAULT_PATH configurable\n   - fix(migrate): validProjectKey défense-en-profondeur + Kill doc\n\n2. TELEGRAM / IPC consolidation :\n   - feat(daemon): bridge IPC fichier — session Claude répond directement à Telegram via Monitor\n   - feat(ipc): hook session-ipc-bridge + wake-claude.sh + replay orphelins\n   - feat(launchagent): telegram-bridge daemon KeepAlive (Phase E5)\n   - refactor(telegram): SUPPRESSION bridge Python (1900 lignes) — double polling 409 corrigé\n   - fix(guard-monitor): pgrep -F vs -f, accumulation Monitor corrigée\n   - fix(bridge): self-healing Monitor post-/compact\n   - Away message quand aucune session Claude active\n\n3. Autres :\n   - feat(voice): transcribe-daemon Whisper + routing vocal master.js\n   - feat(metrics): hook model-metrics, % fenêtre contexte\n   - feat(idriss/leonor): bilan quotidien + stratège hebdo via Ollama+Sonnet\n   - feat(migration): skill /migrate-now bipartite\n   - fix(settings): hooks paths absolus via $CLAUDE_PROJECT_DIR",
+    "question": "Le flux IPC master.js → /tmp/tg-inbox.jsonl → Monitor Claude → /tmp/tg-responses/<id>.txt est le seul chemin critique en production. Quels sont les scénarios de perte de message non couverts par les filets actuels (TTL, .done marker, cleanup, guard-monitor hook) — en particulier autour du redémarrage du daemon master.js ou d'un /compact en cours de traitement ?",
+    "filesToRead": [
+      "bin/master.js",
+      "hooks/session-ipc-bridge.sh",
+      "hooks/guard-monitor-bridge.sh",
+      "parachute/main.go",
+      "parachute/sessions/manager.go",
+      "parachute/health/checker.go",
+      "test/ipc.test.js",
+      ".env"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
