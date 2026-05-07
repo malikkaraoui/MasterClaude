@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "subject": "Parachute Go sessions manager + consolidation IPC Telegram + agents autonomes",
+    "date": "2026-05-07",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "1e8b536..068a3f34422a24ed7fa788cfd8116ae3983f7d87"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "36 commits depuis le dernier handoff intégré (1e8b536). Chantiers principaux : (1) Parachute Go daemon Étapes 3-7 — sessions manager spawn/kill/heartbeat/watchdog, vault loader injection contexte Malik, health checker alertes Telegram, feature flags, cc-parachute CLI/WebUI, backup quotidien, Unix socket migrate handler ; (2) Consolidation IPC Telegram — suppression telegram-bridge.py (1900+ lignes Python), master.js seul assure le polling, away message si session inactive, Monitor tail-f injecté à chaque SessionStart même post-/compact ; (3) Agents autonomes Idriss (bilan 21h05) + Léonor (stratège vendredi 22h) via LaunchAgent + fan-out Ollama ; (4) TelegramFallbackTransport DoH+SNI ; (5) active-todos mécanisme — promesses persistées en mémoire et injectées à chaque SessionStart. Fixes critiques : guard-monitor pgrep-f, ipc-bridge accumulation structurelle, settings paths absolus, migrate path traversal, mutex wakeClaudeSession.",
+    "question": "Le sessions manager Go (parachute/sessions/manager.go) spawn des processus Claude avec injection vault Malik + handoffs — le cycle spawn→heartbeat→watchdog est le cœur du runtime autonome. Quels sont les scénarios de défaillance silencieux : (a) vault absent ou inaccessible au spawn, (b) chevauchement de deux spawns pour le même project_key, (c) heartbeat expiré mais processus encore vivant, (d) watchdog qui redémarre une session alors qu'un /compact est en cours ? L'IPC Telegram (Monitor tail-f + tg-inbox.jsonl) est-il correctement gardé si le SessionStart se produit pendant un redémarrage watchdog ?",
+    "filesToRead": [
+      "parachute/sessions/manager.go",
+      "parachute/vault/loader.go",
+      "parachute/main.go",
+      "hooks/session-ipc-bridge.sh",
+      "hooks/guard-monitor-bridge.sh",
+      "bin/master.js",
+      "scripts/agents/dispatch.sh",
+      "parachute/health/checker.go"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
