@@ -261,3 +261,111 @@ OK , c'est partie
 - Réponse Ollama : Invalid API key · Fix external API key
 
 - Action proposée : à challenger / intégrer
+
+### 2026-05-07 06:07 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : On fait un test télégram... allo???
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-07 06:10 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : Je viens d’avoir un « Invalid API key · Fix external API key »
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-07 06:12 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : Pourquoi alors ça crash à chaque fois ? Tu as trouvé pk ?
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-07 06:12 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : J’ai encore Invalid API key · Fix external API key
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-07 06:13 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : Arrête de raconter des salades donc
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-07 06:15 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : Donc ? En français stp
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-07 06:16 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : C’est api anthropic qui n’est pas accessible à qui ?
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-07 06:28 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : Super. Tu as fait ce fix ?
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-07 06:33 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : Ce que je comprends, c’est que le bridge qui fait le pont entre toi et Telegram a besoin de ton ID unique… mais que ce bridge ne détient pas en dur ton identifiant unique.
+
+Je vois deux solutions simples, lui donner une bonne fois pour toute ton identifiant unique . 
+
+S’il change à ce moment-là, fai
+- Réponse Ollama : Invalid API key · Fix external API key
+
+- Action proposée : à challenger / intégrer
+
+### 2026-05-07 06:36 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : On va faire encore plus simple que ça, il me faut simplement un message automatique lorsque, tu es inactif sur mon Mac. 
+Et quand t’es actif et ben tu réponds .
+
+Tu seras toujours actif sur mon Mac !
+
+Ici je te parle, je suis pas ici pour te relancer en tout cas pas dans un premier temps
+- Réponse Ollama : Erreur Ollama: Client error '404 Not Found' for url 'http://localhost:11434/api/generate'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404
+- Action proposée : à challenger / intégrer
+
+### 2026-05-07 06:36 — Telegram [text]
+
+- Source : telegram
+- Statut : nouveau
+- Résumé : Donc enlève-moi tout de suite, ou du moins désactive pour l’instant le Ollama, qui vient de me donner une erreur 404
+- Réponse Ollama : Erreur Ollama: Client error '404 Not Found' for url 'http://localhost:11434/api/generate'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404
+- Action proposée : à challenger / intégrer

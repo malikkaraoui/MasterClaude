@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "version": "1.0.0",
   "description": "Manifeste typé de tous les hooks claude-atelier. Source de vérité — toute modif d'un hook doit synchroniser cette entrée. Vérifié par test/lint-hooks-manifest.js.",
-  "lastUpdated": "2026-05-06",
+  "lastUpdated": "2026-05-07",
   "hooks": [
     {
       "name": "_parse-input",
@@ -368,7 +368,7 @@
       "exitCodes": {
         "0": "always (setup only, never blocks)"
       },
-      "sha256": "1a8476dc78b1133d"
+      "sha256": "20d9e89eb0827fa9"
     },
     {
       "name": "peter-inbox-check",
@@ -407,7 +407,7 @@
       "exitCodes": {
         "0": "always (jamais bloquant — guidance only)"
       },
-      "sha256": "8220bb51b9889387"
+      "sha256": "442ff58d66845de7"
     },
     {
       "name": "session-handoff-restore",
