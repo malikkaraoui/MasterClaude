@@ -399,13 +399,22 @@ const COMPACT_PENDING_FILE = '/tmp/masterclaude-compact-pending';
 const COMPACT_COUNT_FILE = '/tmp/masterclaude-compact-count';
 const COMPACT_MAX = 3; // Au-delà → migrate (handoff + kill + nouvelle session)
 
-function getCompactCount() {
-  try { return parseInt(_rfs(COMPACT_COUNT_FILE, 'utf8').trim(), 10) || 0; } catch { return 0; }
+// Rattacher le compteur au PID de la session : évite les valeurs stale post-crash
+function _compactCountPath(pid) {
+  return pid ? `${COMPACT_COUNT_FILE}.${pid}` : COMPACT_COUNT_FILE;
 }
-function incrCompactCount() {
-  const n = getCompactCount() + 1;
-  try { _wfs(COMPACT_COUNT_FILE, `${n}\n`); } catch {}
+function getCompactCount(pid) {
+  try { return parseInt(_rfs(_compactCountPath(pid), 'utf8').trim(), 10) || 0; } catch { return 0; }
+}
+function incrCompactCount(pid) {
+  const n = getCompactCount(pid) + 1;
+  try { _wfs(_compactCountPath(pid), `${n}\n`); } catch {}
   return n;
+}
+function resetCompactCount(pid) {
+  try { _wfs(_compactCountPath(pid), '0\n'); } catch {}
+  // Nettoyer aussi le fichier legacy sans PID (rétrocompatibilité hook bash)
+  if (pid) { try { _wfs(COMPACT_COUNT_FILE, '0\n'); } catch {} }
 }
 
 function getCtxPct() {
@@ -435,6 +444,7 @@ function readSessionSignal() {
     if (ageS > 600) return { valid: false, ageS, claudePid };
     if (!isPidAlive(claudePid)) {
       process.stdout.write(`[ipc] signal vivant mais PID=${claudePid} mort — invalidation\n`);
+      resetCompactCount(claudePid);
       return { valid: false, ageS, claudePid };
     }
     return { valid: true, ageS, claudePid };
@@ -678,6 +688,7 @@ async function executeMigration(claudePid, projectKey, reason) {
     }
   }
 
+  resetCompactCount(claudePid);
   await restartSession(claudePid, getCtxPct());
   return '✅ Migration effectuée. La nouvelle session restaurera le handoff au boot.';
 }
@@ -689,6 +700,17 @@ async function routeToClaude(userMsg, projectKey) {
   // Intercept OUI/NON si un compact ou une migration était en attente de validation
   if (_exists(COMPACT_PENDING_FILE)) {
     const normalized = userMsg.trim().toUpperCase();
+    if (normalized !== 'OUI' && normalized !== 'NON') {
+      // Bloquer tout message non-OUI/NON : évite le dispatch silencieux à Claude pendant le choix
+      let pendingData = {};
+      try { pendingData = JSON.parse(_rfs(COMPACT_PENDING_FILE, 'utf8')); } catch {}
+      const { ctxPct: pctPending = '?', action: actionPending = 'compact' } = pendingData;
+      const label = actionPending === 'migrate' ? 'migration' : 'compact';
+      await send(
+        `⏳ En attente de ta réponse (${label} ctx ${pctPending}%). Réponds OUI ou NON — ton message sera traité après.`
+      ).catch(() => {});
+      return '';
+    }
     if (normalized === 'OUI' || normalized === 'NON') {
       let pendingData = {};
       try { pendingData = JSON.parse(_rfs(COMPACT_PENDING_FILE, 'utf8')); } catch {}
@@ -700,15 +722,24 @@ async function routeToClaude(userMsg, projectKey) {
       }
 
       if (action === 'migrate') {
+        // Guard : valider que pendingPid est vivant avant de déclencher la migration
+        let migrPid = pendingPid;
+        if (!migrPid || !isPidAlive(migrPid)) {
+          const freshSig = readSessionSignal();
+          migrPid = freshSig.valid ? freshSig.claudePid : findExistingClaudeSession();
+        }
+        if (!migrPid) {
+          return await send('❌ migrate impossible — claudePid absent ou mort. Aucune session active détectée.').then(() => '');
+        }
         // 3 compacts épuisés — préparer le paquetage puis kill + nouvelle session
-        await send(`📦 Paquetage en cours… (${getCompactCount()} compacts effectués — migration vers nouvelle session)`).catch(() => {});
-        return executeMigration(pendingPid, pendingProject || 'global', `ctx=${ctxPct}% après ${getCompactCount()} compacts`);
+        await send(`📦 Paquetage en cours… (${getCompactCount(migrPid)} compacts effectués — migration vers nouvelle session)`).catch(() => {});
+        return executeMigration(migrPid, pendingProject || 'global', `ctx=${ctxPct}% après ${getCompactCount(migrPid)} compacts`);
       }
 
       // action === 'compact'
       const ok = await compactExistingWindow();
       if (!ok) return `❌ osascript échoué — autorise Terminal.app dans Réglages → Confidentialité → Automation.`;
-      const count = incrCompactCount();
+      const count = incrCompactCount(pendingPid);
       return `✅ /compact envoyé (ctx était ${ctxPct}% — compact n°${count}/${COMPACT_MAX}).`;
     }
   }
@@ -737,7 +768,7 @@ async function routeToClaude(userMsg, projectKey) {
   // Étape 2 — détecter saturation contexte → demander permission (compact ou migrate)
   const ctxPct = getCtxPct();
   if (ctxPct >= CTX_RESTART_THRESHOLD && !_exists(COMPACT_PENDING_FILE)) {
-    const compactsDone = getCompactCount();
+    const compactsDone = getCompactCount(claudePid);
     const action = compactsDone >= COMPACT_MAX ? 'migrate' : 'compact';
     try {
       _wfs(COMPACT_PENDING_FILE, JSON.stringify({ ctxPct, action, claudePid, projectKey }));

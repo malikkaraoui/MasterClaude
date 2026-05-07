@@ -17,6 +17,8 @@ touch "$INBOX_FILE"
 # Remettre à zéro le ctx% + compteur compact au boot — évite les valeurs stale
 echo "0" > /tmp/masterclaude-ctx-pct 2>/dev/null || true
 echo "0" > /tmp/masterclaude-compact-count 2>/dev/null || true
+# Écrire aussi dans le fichier PID-spécifique (PPID = Claude Code = cible restart)
+echo "0" > "/tmp/masterclaude-compact-count.${PPID}" 2>/dev/null || true
 rm -f /tmp/masterclaude-compact-pending 2>/dev/null || true
 
 # === Singleton — tuer les Monitor zombies sur tg-inbox.jsonl ===
