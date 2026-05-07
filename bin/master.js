@@ -396,6 +396,17 @@ async function pollGitHub() {
 const CTX_PCT_FILE = '/tmp/masterclaude-ctx-pct';
 const CTX_RESTART_THRESHOLD = 60; // % au-delà duquel on demande permission compact
 const COMPACT_PENDING_FILE = '/tmp/masterclaude-compact-pending';
+const COMPACT_COUNT_FILE = '/tmp/masterclaude-compact-count';
+const COMPACT_MAX = 3; // Au-delà → migrate (handoff + kill + nouvelle session)
+
+function getCompactCount() {
+  try { return parseInt(_rfs(COMPACT_COUNT_FILE, 'utf8').trim(), 10) || 0; } catch { return 0; }
+}
+function incrCompactCount() {
+  const n = getCompactCount() + 1;
+  try { _wfs(COMPACT_COUNT_FILE, `${n}\n`); } catch {}
+  return n;
+}
 
 function getCtxPct() {
   try {
@@ -675,21 +686,30 @@ async function executeMigration(claudePid, projectKey, reason) {
 // Garanties : (1) jamais de subprocess fantôme, (2) auto-wake si pas de session,
 // (3) restart auto si ctx >= 60% APRÈS la réponse au tour courant.
 async function routeToClaude(userMsg, projectKey) {
-  // Intercept OUI/NON si un /compact était en attente de validation
+  // Intercept OUI/NON si un compact ou une migration était en attente de validation
   if (_exists(COMPACT_PENDING_FILE)) {
     const normalized = userMsg.trim().toUpperCase();
     if (normalized === 'OUI' || normalized === 'NON') {
-      let ctxPct = '?';
-      try { ctxPct = _rfs(COMPACT_PENDING_FILE, 'utf8').trim(); } catch {}
+      let pendingData = {};
+      try { pendingData = JSON.parse(_rfs(COMPACT_PENDING_FILE, 'utf8')); } catch {}
       try { _unlink(COMPACT_PENDING_FILE); } catch {}
-      if (normalized === 'OUI') {
-        const ok = await compactExistingWindow();
-        return ok
-          ? `✅ /compact envoyé dans la fenêtre MasterClaude (ctx était ${ctxPct}%).`
-          : `❌ osascript échoué — autorise Terminal.app dans Réglages → Confidentialité → Automation.`;
-      } else {
+      const { ctxPct = '?', action = 'compact', claudePid: pendingPid, projectKey: pendingProject } = pendingData;
+
+      if (normalized === 'NON') {
         return `👌 OK, je reste en place. Contexte à ${ctxPct}%.`;
       }
+
+      if (action === 'migrate') {
+        // 3 compacts épuisés — préparer le paquetage puis kill + nouvelle session
+        await send(`📦 Paquetage en cours… (${getCompactCount()} compacts effectués — migration vers nouvelle session)`).catch(() => {});
+        return executeMigration(pendingPid, pendingProject || 'global', `ctx=${ctxPct}% après ${getCompactCount()} compacts`);
+      }
+
+      // action === 'compact'
+      const ok = await compactExistingWindow();
+      if (!ok) return `❌ osascript échoué — autorise Terminal.app dans Réglages → Confidentialité → Automation.`;
+      const count = incrCompactCount();
+      return `✅ /compact envoyé (ctx était ${ctxPct}% — compact n°${count}/${COMPACT_MAX}).`;
     }
   }
 
@@ -714,13 +734,27 @@ async function routeToClaude(userMsg, projectKey) {
     }
   }
 
-  // Étape 2 — détecter saturation contexte → demander permission (jamais auto-restart)
+  // Étape 2 — détecter saturation contexte → demander permission (compact ou migrate)
   const ctxPct = getCtxPct();
   if (ctxPct >= CTX_RESTART_THRESHOLD && !_exists(COMPACT_PENDING_FILE)) {
-    try { _wfs(COMPACT_PENDING_FILE, `${ctxPct}\n`); } catch {}
+    const compactsDone = getCompactCount();
+    const action = compactsDone >= COMPACT_MAX ? 'migrate' : 'compact';
+    try {
+      _wfs(COMPACT_PENDING_FILE, JSON.stringify({ ctxPct, action, claudePid, projectKey }));
+    } catch {}
     // Auto-expire après 5 min si pas de réponse
     setTimeout(() => { try { _unlink(COMPACT_PENDING_FILE); } catch {} }, 5 * 60 * 1000);
-    await send(`⚠️ Contexte à ${ctxPct}% (≥ ${CTX_RESTART_THRESHOLD}%) — je /compact dans la fenêtre existante ? (réponds OUI ou NON, timeout 5 min)`).catch(() => {});
+    if (action === 'migrate') {
+      await send(
+        `🚨 Contexte à ${ctxPct}% — ${compactsDone} compacts effectués, plus d'effet.\n` +
+        `Prêt à préparer le paquetage et lancer une nouvelle session. (OUI/NON, timeout 5 min)`
+      ).catch(() => {});
+    } else {
+      await send(
+        `⚠️ Contexte à ${ctxPct}% (≥ ${CTX_RESTART_THRESHOLD}%) — je /compact dans la fenêtre existante ?\n` +
+        `(compact n°${compactsDone + 1}/${COMPACT_MAX} — OUI/NON, timeout 5 min)`
+      ).catch(() => {});
+    }
   }
 
   // Étape 3 — dispatch via IPC (fichier inbox + polling response file)

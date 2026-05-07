@@ -14,8 +14,9 @@ MONITOR_PIDS_FILE="/tmp/masterclaude-monitor-pids"
 mkdir -p "$RESPONSE_DIR"
 touch "$INBOX_FILE"
 
-# Remettre à zéro le ctx% au boot — évite que master.js lise une valeur stale
+# Remettre à zéro le ctx% + compteur compact au boot — évite les valeurs stale
 echo "0" > /tmp/masterclaude-ctx-pct 2>/dev/null || true
+echo "0" > /tmp/masterclaude-compact-count 2>/dev/null || true
 rm -f /tmp/masterclaude-compact-pending 2>/dev/null || true
 
 # === Singleton — tuer les Monitor zombies sur tg-inbox.jsonl ===
