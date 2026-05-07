@@ -22,9 +22,13 @@
     ]
   },
   "response": {
-    "model": null,
-    "content": null,
+    "model": "github-copilot-pr-reviewer",
+    "content": "> Reviewer: GitHub Copilot — model: unknown\n\nCette PR rend plus robuste le flow /compact → /migrate du daemon Telegram (master.js) en réduisant les états stale après crash/restart, en sécurisant le déclenchement de migration, et en bloquant les messages hors OUI/NON pendant une validation pending.\n\n(a) Reset compact-count dans readSessionSignal() : le side-effect est borné au cas « signal encore frais + PID mort ». Dans les appels /health, /migrate et routeToClaude, le reset ne se déclenche que si le PID est déjà invalide — il ne peut donc pas provoquer une perte de comptage sur un PID vivant. La fonction n'est plus pure, mais le side-effect est conditionnel et sans impact fonctionnel sur les chemins nominaux.\n\n(b) Blocage non-OUI/NON avec return '' : la boucle Telegram sauvegarde offset avant traitement et n'envoie une seconde réponse que si reply est truthy. Le rappel est déjà envoyé via send(), donc pas d'ack manquant et pas de double-envoi. Le return '' est correctement absorbé.\n\n(c) Race entre reset legacy au boot et lecture PID-spécifique : le reset legacy au boot (avant ensureTranscribeDaemon) remet /tmp/masterclaude-compact-count à 0. Le fichier PID-spécifique n'existe pas encore à ce stade (il est créé au SessionStart par le hook). Il n'y a donc pas de fenêtre de race : le legacy est remis à zéro avant toute session, et le PID-spécifique est initialisé proprement au premier SessionStart.\n\nVerdict : les 3 points sont couverts. Pas de régression identifiée sur les chemins d'appel actuels.",
     "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
   },
-  "integration": null
+  "integration": {
+    "retained_implement": "Les 3 points sont validés sans régression : (a) reset compact-count dans readSessionSignal() borné au chemin PID-mort — pas de perte de comptage sur PID vivant ; (b) return '' après rappel OUI/NON correctement absorbé par la boucle poll — pas d'ack manquant ; (c) reset legacy au boot précède la création du fichier PID-spécifique — pas de race condition.",
+    "rejected_keep": "Aucune demande de rollback. Copilot note que le handoff était incomplet (response.content null) mais c'est le fonctionnement attendu du flux review-copilot — le JSON est rempli après la review.",
+    "verdict": "Review OK sur ce lot. Les 3 fixes de robustesse compact/migrate sont sains. La dette de lisibilité sur readSessionSignal() (side-effect conditionnel) est acceptée sans correctif immédiat requis."
+  }
 }
