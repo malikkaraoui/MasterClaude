@@ -7,7 +7,7 @@
 
 INBOX_FILE="/tmp/tg-inbox.jsonl"
 
-if pgrep -f "tail -f .* /tmp/tg-inbox.jsonl" >/dev/null 2>&1; then
+if pgrep -f "tail -[fF].* /tmp/tg-inbox.jsonl" >/dev/null 2>&1; then
   exit 0
 fi
 
