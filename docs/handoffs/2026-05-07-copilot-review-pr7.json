@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "date": "2026-05-07",
+    "type": "review",
+    "subject": "Copilot review PR #7 — parachute-sessions-ipc-consolidation",
+    "reviewedRange": "1e8b536..3c7d3da",
+    "priority": "haute"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Handoff review 36 commits parachute Go sessions manager + consolidation IPC Telegram. Question : scénarios de défaillance silencieux du sessions manager et robustesse IPC Telegram.",
+    "question": "Le sessions manager Go (parachute/sessions/manager.go) spawn des processus Claude avec injection vault Malik + handoffs — le cycle spawn→heartbeat→watchdog est le cœur du runtime autonome. Quels sont les scénarios de défaillance silencieux : (a) vault absent, (b) chevauchement de spawns, (c) heartbeat expiré mais processus vivant, (d) watchdog redémarre pendant un /compact ? L'IPC Telegram est-il correctement gardé si le SessionStart se produit pendant un redémarrage watchdog ?",
+    "filesToRead": [
+      "hooks/session-ipc-bridge.sh"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": "github-copilot-pr-reviewer",
+    "content": "Deux issues identifiées dans hooks/session-ipc-bridge.sh :\n\n1. **ACTIVE_TODOS_FILE hardcodé sur slug machine-spécifique** (L55) : le chemin `-Users-malik-MasterClaude` est en dur — sur une autre machine ou un autre projet, le fichier n'existera jamais et l'injection des todos sera silencieusement désactivée (le try/except avale tout). Fix : construire le chemin dynamiquement depuis le slug/PROJECT_KEY réellement courant (variable d'environnement Claude Code ou détection automatique), avec fallback explicite si introuvable.\n\n2. **Todos illimités dans additionalContext** (L140) : la section active-todos ajoute potentiellement un nombre illimité de tâches dans additionalContext — toutes les lignes `- [ ]` sans borne. Peut saturer le contexte et provoquer des comportements instables au SessionStart. Fix : ajouter une limite (ex: MAX_TODOS=10) et un budget de caractères, avec troncature `…` pour garder la taille prévisible."
+  },
+  "integration": {
+    "retained_implement": [
+      "Fix session-ipc-bridge.sh L55 : construire ACTIVE_TODOS_FILE dynamiquement depuis CLAUDE_PROJECT_DIR ou détection automatique du slug courant",
+      "Fix session-ipc-bridge.sh L140 : limiter les todos injectés (MAX_TODOS=10, budget 500 chars) avec troncature '…'"
+    ],
+    "verdict": "Les deux issues Copilot sont légitimes : le hardcoding du slug rend le mécanisme non-portable et silencieusement cassé sur d'autres machines, et l'absence de limite sur les todos risque une saturation de contexte au SessionStart — le scénario le plus critique car il touche le canal de réveil de toute session autonome."
+  }
+}
