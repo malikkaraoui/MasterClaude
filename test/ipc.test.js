@@ -30,9 +30,9 @@ ok('bin/telegram.js supprimé', () =>
 ok('bin/master.js présent', () =>
   nodeOk(existsSync(join(ROOT, 'bin/master.js')), 'master.js absent'));
 
-ok('away message dans master.js', () => {
+ok('secrétaire Ollama intégrée dans master.js', () => {
   const src = readFileSync(join(ROOT, 'bin/master.js'), 'utf8');
-  nodeOk(src.includes('Claude est en veille'), 'away message absent');
+  nodeOk(src.includes('handleOffline'), 'handleOffline absent — secrétaire non intégrée');
 });
 
 ok('master.js sans référence telegram-bridge.py', () => {
