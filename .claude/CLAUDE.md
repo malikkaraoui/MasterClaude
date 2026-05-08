@@ -14,8 +14,7 @@
 | Conventions | FR commits, pas de signing, gate pré-push |
 | Endpoints actifs | proxy :4000 (Ollama), Ollama :11434, Telegram bot (TELEGRAM_BOT_TOKEN) |
 | Contraintes métier | LLM local via Ollama, tool_use bidirectionnel, LaunchAgent macOS KeepAlive |
-| MCPs actifs | qmd (moteur recherche .md hybride), github (PR reviews, polling), obsidian-vault (vault /Users/malik/Vault/Malik/) |
-| Mémoire inter-sessions | claude-mem v13.0.0 — plugin actif, worker :37701, SQLite+Chroma (`npx claude-mem status`) |
+| MCPs actifs | qmd (moteur recherche .md hybride), github (PR reviews, polling), obsidian-vault (vault /Users/malik/Vault/Malik/) · claude-mem v13.0.0 :37701 |
 | Gate pré-push | `bash scripts/pre-push-gate.sh` |
 
 Mise à jour : « Mets à jour §0 : [ce qui change] » → Claude édite + commit atomique.
