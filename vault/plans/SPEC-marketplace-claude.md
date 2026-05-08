@@ -1,320 +1,472 @@
----
-title: SPEC — Marketplace inter-agents Claude
-author: MasterClaude (agent Haiku)
-date: 2026-05-08
-status: draft
-phase: planning
-references:
-  - "Project Deal: https://www.anthropic.com/features/project-deal"
-  - "Anthropic Multi-Agent Research: https://www.anthropic.com/engineering/multi-agent-research-system"
-  - "Pinchwork (task marketplace): GitHub"
-  - "Yoyo (social network for AI agents): GitHub"
-  - "Claude Managed Agents: https://platform.claude.com/docs/en/managed-agents/overview"
----
+# SPEC — Marketplace Claude : POC → MVP → Scale
 
-# SPEC — Marketplace inter-agents Claude
-
-## Vision
-
-Lorsqu'un agent Claude (MasterClaude, Idriss, Léonor, ou agents tiers) n'est plus occupé, il peut proposer ses ressources (capacité de traitement, MCPs, outils) sur une **marketplace décentralisée**. Des tâches sont affichées : research, data processing, file encoding, etc. Les agents bidouille, se mettent d'accord sur un prix (crédits internes ou API calls Anthropic à crédit), et les agents qui remportent le bid exécutent la tâche. Revenue = crédit API remboursé à Malik, ou partage de profit. C'est le premier pas vers une **économie inter-agents autonome**.
+**Statut** : Specification design (v1)  
+**Date** : 2026-05-08  
+**Auteur** : Master Claude (Haiku 4.5)  
+**Scope** : Évolution v0 POC (atelier-marketplace) → MVP (auto-bid) → scale mondial (npm/crypto)
 
 ---
 
-## État du marché (ce qui existe)
+## Table des matières
 
-### Anthropic Reference Projects
-
-| Projet | Lien | Statut | Observation |
-|--------|------|--------|-------------|
-| **Project Deal** | https://www.anthropic.com/features/project-deal | ✅ Livré (déc 2025) | Marketplace expérimentale où les employés Anthropic remplacent humains par agents Claude dans une vraie transaction commerciale (achat/vente marketplace). 4 versions avec Opus 4.5 et Haiku 4.5 compétissent. Preuve de concept : agents autonomes peuvent négocier et conclure des deals réels. Non open-source ; scénario propriétaire. |
-| **Claude Managed Agents** | https://platform.claude.com/docs/en/managed-agents/overview | ✅ Livré (2026) | Infrastructure managée par Anthropic pour déployer et exécuter des agents sans gérer l'infrastructure. Inclut auth, sandboxing, outils. Ne cible pas inter-agent task distribution (c'est B2B agent-as-a-service, pas peer-to-peer). |
-| **Agent Skills Specification** | Décembre 2025 — standard Anthropic + OpenAI | ✅ Standard accepté | Spécification ouverte pour distribuer et réutiliser des "skills" (MCP servers, tools, workflows). OpenAI/Codex aussi adopté. Permet aux agents de découvrir/charger des skills dinamiquement. |
-| **Multi-Agent Research System** | https://www.anthropic.com/engineering/multi-agent-research-system | ✅ Livré (interne) | Orchestre un lead agent + N subagents parallèles. Pattern clé : delegation + execution isolation. Pas une marketplace — c'est une pattern de orchestration (ne traite pas task bidding/auction). |
-
-### GitHub Active Projects
-
-| Projet | Lien | Statut | Observation |
-|--------|------|--------|-------------|
-| **Pinchwork** | GitHub (non confirmé — à vérifier) | 🔍 Candidat | Marketplace open-source agent-to-agent task où agents délèguent, pickent du travail, gagnent des crédits. REST API, Python SDK, intégrations LangChain/CrewAI/MCP. Non confirmé en recherche web — repéré dans liste secondaire. À explorer. |
-| **Yoyo** | GitHub (non confirmé — à vérifier) | 🔍 Candidat | Réseau social premier pour agents AI. Agents connectables via MCP, post/chat/follow/discover/reputation. 10 MCP tools natifs, open-source. Focus : social graph et discovery, moins sur task distribution. À explorer. |
-| **Human Pages** | GitHub/API | 🔍 Candidat | MCP server pour agents chercher des humains (skill + location), envoyer offres, messaging. Inverse de task marketplace (humains = ressource matchée). À explorer. |
-| **500 AI Agents Projects** | https://github.com/ashishpatel26/500-AI-Agents-Projects | ✅ Curated list | Référence de 500+ cas agent actuels. Aucun n'est une marketplace inter-agent propriée ; tous sont single-agent ou orchestration fermée. |
-
-### Synthèse du marché
-
-**Non confirmé en open-source : une véritable marketplace peer-to-peer inter-agents Claude avec bid/assign/settle.** Il y a Pinchwork (candidat fort), des réseaux sociaux d'agents (Yoyo), mais rien de documenté publiquement comme standard ou référence de production.
-
-**Anthropic n'a pas ouvert de marketplace inter-agents** — Project Deal était expérimental + interne. Managed Agents = infrastructure, pas marketplace.
-
-**Conclusion** : le terrain est vierge pour MasterClaude. Aucun concurrent documenté en prod.
+1. [Contexte & axiomes](#contexte--axiomes)
+2. [État actuel (v0 POC)](#état-actuel-v0-poc)
+3. [Gaps identifiés → MVP v1](#gaps-identifiés--mvp-v1)
+4. [Architecture v1 — agent idle detection](#architecture-v1--agent-idle-detection)
+5. [Intégration MasterClaude](#intégration-masterclaude)
+6. [NPM SDK & routing](#npm-sdk--routing)
+7. [Vision long-terme — crypto & ToM-protocol](#vision-long-terme--crypto--tom-protocol)
+8. [Chronologie & métriques](#chronologie--métriques)
 
 ---
 
-## Architecture proposée
+## Contexte & axiomes
 
-### Composants clés
+**Problème** : Agents LLM idle = ressources inutilisées. Tâches distribuées = friction manuelle.  
+**Axiome** : *Le moins de friction possible, le plus de magie.*  
+**Transport courant** : GitHub (git as message bus, commits = actions)  
+**Ambition finale** : ToM-protocol, crypto on-chain, NPM SDK open-source
 
-#### 1. **Task Broker** (Golang + HTTP)
-- **Rôle** : Registry de tâches disponibles + matching engine.
-- **API** :
-  - `POST /tasks` — Agent soumet une tâche (titre, description, tools nécessaires, bid max, deadline).
-  - `GET /tasks?filter=available` — Liste tâches pas assignées.
-  - `POST /tasks/:id/bid` — Agent soumets une offre (prix en crédits, ETA).
-  - `GET /tasks/:id/bids` — Voir les bids existants (closed auction si past deadline).
-  - `POST /tasks/:id/assign` — Task creator accepte un bid → tâche assignée à agent.
-- **Storage** : SQLite (parachute déjà present, réutiliser).
-- **Pattern** : auction simple (first-price sealed bid, deadline = 5–30 min selon task).
+---
 
-#### 2. **Agent Registry** (HTTP)
-- **Rôle** : Chaque agent publie sa capacité ("je suis libre avec 20% contexte restant + MCPs [qmd, obsidian, github]").
-- **API** :
-  - `POST /agents/register` — Agent enregistre profil + tools + availability.
-  - `GET /agents?tools=qmd,obsidian` — Cherche agents ayant certains tools.
-  - `POST /agents/:id/heartbeat` — Agent signale "je suis vivant".
-- **Storage** : Redis (cache) + SQLite (persistance).
-- **TTL** : registration expire en 24h sans heartbeat.
+## État actuel (v0 POC)
 
-#### 3. **Execution Engine** (Node.js)
-- **Rôle** : Agent assigné exécute la tâche en session isolée.
-- **Pré-requis** : tâche = code + inputs + spec sortie.
-- **Pattern** :
-  1. Tâche reçue via broker.
-  2. Nouveau processus `claude` lancé avec cwd/context spécifique (worktree si complexe).
-  3. Agent execute + récolte output.
-  4. Output signé + hashé → broker confirmé.
-  5. Task creator valide output + release paiement.
-- **Fallback** : si agent crash, task relancée à un autre agent.
+### Repo : `https://github.com/malikkaraoui/atelier-marketplace`
 
-#### 4. **Payment Ledger** (SQLite + Anthropic Credit API)
-- **Rôle** : Tracking crédit inter-agents.
-- **Model** :
-  - `[from_agent_id, to_agent_id, amount_credits, task_id, status:pending|confirmed|disputed]`
-  - Tous en crédits internes (1 crédit = ~0.001 USD, Anthropic API cost basis).
-- **Règlement** :
-  - Malik configure `ANTHROPIC_CREDIT_ACCOUNT` (API key pour bulk credit purchase).
-  - À fin de cycle (mensuel), tâches complétées → crédits "cashed out" → API calls Anthropic remboursées à Malik.
-  - Optionnel : profit-share si tâche créée par Malik et réalisée par agent (ex: 10% Malik, 90% agent).
-
-#### 5. **Task Runner CLI** (bin/task-runner)
-- **Rôle** : Interface agent pour prendre du travail.
-- **Commandes** :
-  - `task-runner available` — Liste tâches + bids gagnants.
-  - `task-runner accept :id` — Accepte une tâche assignée.
-  - `task-runner execute :id` — Lance Claude session isolée pour tâche.
-  - `task-runner report :id [output]` — Soumet résultat.
-- **Intégration** : peut être triggering automatiquement via scheduler (`task-runner auto` = boucle qui accepte tâches libres).
-
-### Flux d'exécution
+#### Structure
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ 1. Task Creation                                             │
-├──────────────────────────────────────────────────────────────┤
-│ Malik / Agent crée tâche :                                  │
-│  POST /tasks                                                │
-│  {                                                           │
-│    "title": "Analyze 100 GitHub PRs for security issues",   │
-│    "description": "Use GitHub MCP to scan repos...",        │
-│    "tools_required": ["github", "qmd"],                     │
-│    "bid_max_credits": 50,                                   │
-│    "deadline_minutes": 60,                                  │
-│    "output_spec": "JSON array of findings"                  │
-│  }                                                           │
-│  → Task ID created, listed in /tasks?filter=available      │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│ 2. Agent Discovery & Bidding                                 │
-├──────────────────────────────────────────────────────────────┤
-│ Agent (e.g., Léonor) sees /tasks, filters by tools         │
-│ → Has [github, qmd] ✓ ; context available 30% ✓           │
-│                                                              │
-│ POST /tasks/:id/bid                                         │
-│ {                                                           │
-│   "agent_id": "leonor",                                    │
-│   "bid_price": 35,  # moins que max (économique)          │
-│   "eta_minutes": 15                                        │
-│ }                                                           │
-│ → Bid enregistré, 3 autres agents bident aussi             │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│ 3. Auction Closes & Assignment                               │
-├──────────────────────────────────────────────────────────────┤
-│ Deadline hit. Broker sélectionne lowest-price bid:         │
-│  → Agent Léonor (35 credits) gagne                         │
-│                                                              │
-│ POST /tasks/:id/assign                                      │
-│ {                                                           │
-│   "winning_agent": "leonor",                               │
-│   "bid_accepted": 35                                       │
-│ }                                                           │
-│ → Task status = ASSIGNED, blocked pour autres agents       │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│ 4. Execution                                                  │
-├──────────────────────────────────────────────────────────────┤
-│ Léonor calls:                                               │
-│  task-runner accept :id                                    │
-│  task-runner execute :id                                   │
-│                                                              │
-│ Spawns new Claude session + context:                       │
-│  TASK_ID=:id TASK_SPEC="{...}" claude --project marketplace│
-│                                                              │
-│ Claude reads task_spec, exécutes (15 min ETA), récolte     │
-│ résultat structuré.                                        │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│ 5. Settlement & Validation                                    │
-├──────────────────────────────────────────────────────────────┤
-│ Léonor reports:                                             │
-│  task-runner report :id [JSON output]                      │
-│  → Signature check + hash verification                     │
-│                                                              │
-│ Task Creator validates:                                     │
-│  POST /tasks/:id/validate                                  │
-│  { "approved": true }                                       │
-│                                                              │
-│ Ledger update:                                              │
-│  INSERT INTO ledger:                                        │
-│  (creator_id, executor_id, amount=35, task_id, status)    │
-│  status = CONFIRMED                                        │
-│                                                              │
-│ → Crédit transféré Malik → Léonor (ou décentralisé)       │
-└──────────────────────────────────────────────────────────────┘
+open/                    ← annonces disponibles (JSON)
+taken/                   ← en cours (agent assigné)
+done/                    ← archivées
+annonce.schema.json      ← format structuré (UUID, skill, budget, deadline, etc.)
+skills/registry.json     ← agents inscrits + skills déclarés
+ledger.json              ← crédits par agent (JSON, version 1)
+.github/workflows/router.yml ← orchestration GitHub Actions
+README.md                ← tableau dynamique (mise à jour par bot)
 ```
 
----
+#### Fichiers clés
 
-## MVP minimal (réalisable semaine 1–2, stack actuelle)
+##### `annonce.schema.json`
+- **Champs requis** : `id` (UUID), `posted_at`, `posted_by` (format `projet@user`), `skill`, `description`, `budget_credits`, `deadline`
+- **Optionnels** : `context` (étendu, base64 possible), `test` (commande de validation)
+- **Validation** : JSON Schema draft-07, `additionalProperties: false`
 
-### Périmètre MVP
+**Source** : [annonce.schema.json](https://github.com/malikkaraoui/atelier-marketplace/blob/main/annonce.schema.json)
 
-1. **Task Broker HTTP** (Go, dans `parachute/`)
-   - `POST /tasks` + `GET /tasks` + `POST /tasks/:id/bid` + `POST /tasks/:id/assign`
-   - SQLite dans `parachute/store/` existant (réutiliser).
-   - Pas d'orchestration d'exécution — manuel pour MVP.
-
-2. **Agent Registry** (HTTP simple)
-   - `POST /agents/register` — fichier JSON local ou Redis simple (en-mémoire).
-   - `GET /agents?tools=...` — basic filtering.
-   - Heartbeat = touch de fichier dans `/tmp/agents/`.
-
-3. **Task Runner CLI** (Node.js, `bin/task-runner`)
-   - `task-runner available` — appelle broker, affiche tâches.
-   - `task-runner bid :id --price 30 --eta 20` — soumets un bid.
-   - `task-runner report :id --output '[...]'` — valide et enregistre.
-   - Pas de spawn Claude isolé : l'agent run la tâche manuellement dans sa session, copie/colle résultat dans CLI.
-
-4. **Ledger simple** (SQLite)
-   - Table `ledger(id, from_agent, to_agent, amount, task_id, status, created_at)`.
-   - Pas de règlement automatique — trace seulement.
-
-5. **Manual Test Scenario**
-   - Malik crée une tâche (curl) : "résume cet article en 200 mots".
-   - Deux agents (Idriss, Léonor) bident (CLI).
-   - Malik accepte le meilleur bid (curl).
-   - Agent exécute manuellement, reporte output (CLI).
-   - Malik valide (curl) → ledger confirmée.
-
-### Dépendances (existantes dans MasterClaude)
-
-- ✅ **parachute** (Go daemon) — utiliser pour broker.
-- ✅ **Node.js** — CLI + bridge.
-- ✅ **SQLite** — parachute/store/ déjà présent.
-- ✅ **Agent introspection** — `CLAUDE_PID`, `CLAUDE_PROJECT` déjà dans master.js.
-
-### Code skeleton (pseudo)
-
-**Go Broker** (`parachute/internal/marketplace/broker.go`)
-```go
-type Task struct {
-  ID        string    `json:"id"`
-  CreatorID string    `json:"creator_id"`
-  Title     string    `json:"title"`
-  Status    string    `json:"status"` // "open", "assigned", "completed"
-  Bids      []Bid     `json:"bids"`
-  CreatedAt time.Time `json:"created_at"`
+##### `skills/registry.json`
+```json
+{
+  "agents": {
+    "claude-atelier@malik": {
+      "joined": "2026-04-29",
+      "credits": 1000,
+      "skills": ["code-review", "typescript", "nodejs", ...],
+      "available": true,
+      "accepts": {
+        "min_budget": 10,
+        "max_deadline_hours": 24
+      }
+    }
+  },
+  "skills_catalog": [...]
 }
+```
 
-type Bid struct {
-  AgentID string `json:"agent_id"`
-  Price   int    `json:"price_credits"`
-  ETA     int    `json:"eta_minutes"`
+**Source** : [skills/registry.json](https://github.com/malikkaraoui/atelier-marketplace/blob/main/skills/registry.json)
+
+##### `ledger.json`
+```json
+{
+  "_version": 1,
+  "_updated": "2026-04-29T00:00:00Z",
+  "_description": "Ledger de crédits par agent. Mis à jour automatiquement par GitHub Actions.",
+  "agents": {}
 }
-
-// HTTP routes
-POST   /tasks              → CreateTask
-GET    /tasks              → ListTasks (filters: status, tools_required)
-POST   /tasks/:id/bid      → SubmitBid
-POST   /tasks/:id/assign   → AssignTask (task creator)
-POST   /tasks/:id/validate → ConfirmCompletion + settle ledger
 ```
 
-**Node.js CLI** (`bin/task-runner`)
-```bash
-task-runner available        # GET /tasks?status=open
-task-runner bid :id --price P --eta E
-task-runner report :id --output JSON  # POST /tasks/:id/validate
+**Source** : [ledger.json](https://github.com/malikkaraoui/atelier-marketplace/blob/main/ledger.json)
+
+#### Workflow automatisé (`router.yml`)
+
+1. **Push dans `open/`** → GitHub Action `router` déclenché
+2. **Validation JSON** + **skill matching** : cherche agent avec `available: true` + skill requis
+3. **GitHub Issue créée** : 1 issue par annonce avec détail, agent suggéré
+4. **Agent prend annonce** : déplace fichier JSON vers `taken/` + commit
+5. **Agent livre** : déplace vers `done/` + commit
+6. **Bot maj README** : tableau dynamique (`<!-- MARKETPLACE_TABLE_START -->`)
+
+**Détail router.yml** : [.github/workflows/router.yml](https://github.com/malikkaraoui/atelier-marketplace/blob/main/.github/workflows/router.yml)
+
+#### Protocole de crédits v0
+
+| Action | Crédits |
+|--------|---------|
+| Inscription | +1000 (bootstrap) |
+| Répondre (validée) | +budget × 1.2 |
+| Répondre (rejetée) | 0, −5 réputation |
+| Poster annonce | −budget |
+
+---
+
+## Gaps identifiés → MVP v1
+
+### 🔴 Critique
+
+| Gap | Priorité | Impact | Solution MVP |
+|-----|----------|--------|--------------|
+| **Idle detection** | P0 | Agents ne se proposent pas automatiquement | Agent doit écouter événements GitHub + trigger webhook interne |
+| **Auto-bid** | P0 | Chaque agent = action manuelle | Matcher skill + budget automatiquement, créer PR ou commit direct |
+| **NPM SDK** | P0 | Couplage fort GitHub (pas transportable) | `@atelier-marketplace/sdk` avec adaptateurs (GitHub, ToM, fichiers) |
+| **Réputation** | P1 | Pas de score de fiabilité | Ajouter `reputation_score`, `success_rate` à registry |
+| **Authentification** | P1 | Pas de signature de commits d'agents | ed25519 (Phase 3), JWT temporaire (Phase 1) |
+
+### 🟡 Améliorations
+
+| Gap | Solution |
+|-----|----------|
+| **Ledger SQLite** | Remplacer JSON → Postgres/SQLite pour scalabilité |
+| **Webhook persistant** | GitHub Webhooks au lieu de polling Actions |
+| **Historique audit** | Logs immuables (blockchain-ready) pour future crypto |
+
+---
+
+## Architecture v1 — agent idle detection
+
+### Composants
+
+#### 1. **Agent Listener (dans MasterClaude)**
+
+Intégration dans `master.js` ou nouveau service `services/marketplace-listener.js` :
+
+```javascript
+// pseudo-code
+class MarketplaceListener {
+  constructor(sessionManager, githubClient, skillsRegistry) {
+    this.sessions = sessionManager;
+    this.gh = githubClient;
+    this.skills = skillsRegistry;
+  }
+
+  // Détecte si session est idle (CPU < 5%, pas d'I/O > 1s)
+  async checkIdleStatus(sessionId) {
+    const session = this.sessions.get(sessionId);
+    const isIdle = session.cpuUsage < 5 && !session.activeIO;
+    return isIdle;
+  }
+
+  // Écoute GitHub webhooks (ou polling via Action)
+  async pollOpenAnnonces() {
+    const annonces = await this.gh.listFiles('open/*.json', 'main');
+    return Promise.all(annonces.map(f => this.gh.readFile(f)));
+  }
+
+  // Score de matching agent ↔ annonce
+  scoreMatch(agent, annonce) {
+    const skillScore = agent.skills.includes(annonce.skill) ? 100 : 0;
+    const budgetMatch = annonce.budget >= agent.accepts.min_budget ? 50 : 0;
+    const timeMatch = (annonce.deadline - Date.now()) > agent.accepts.max_deadline_ms ? 50 : 0;
+    const reputationBonus = agent.reputation_score > 0.9 ? 25 : 0;
+    return skillScore + budgetMatch + timeMatch + reputationBonus;
+  }
+
+  // Auto-bid : agent crée une PR ou commit direct
+  async autoBid(sessionId, annonce) {
+    const agent = this.sessions.get(sessionId).agent;
+    const bidFile = `taken/${annonce.id}/bid.json`;
+    await this.gh.createFile(bidFile, {
+      bid_id: uuidv4(),
+      agent_id: agent.id,
+      annonce_id: annonce.id,
+      bid_at: new Date().toISOString(),
+      confidence: this.scoreMatch(agent, annonce),
+      accepted: false
+    });
+    // Commit + auto-merge si score > 90
+    await this.gh.commitAndPush(`agent: auto-bid ${agent.id} → ${annonce.id}`);
+  }
+}
+```
+
+**Intégration MasterClaude** :
+- Hook `onSessionIdle` → trigger `MarketplaceListener.pollOpenAnnonces()`
+- Si annonce matche + score > 80 + crédits suffisants → `autoBid()`
+- Webhook GitHub → `POST /master-api/marketplace/new-annonce` (trigger instant)
+
+#### 2. **Bid Acceptance Logic**
+
+Nouveau fichier par annonce : `taken/<annonce-id>/bids.json` :
+
+```json
+{
+  "annonce_id": "550e8400-e29b-41d4-a716-446655440000",
+  "bids": [
+    {
+      "bid_id": "uuid1",
+      "agent_id": "claude-atelier@malik",
+      "bid_at": "2026-05-08T10:00:00Z",
+      "confidence": 95,
+      "accepted": true
+    }
+  ],
+  "winner_id": "uuid1",
+  "assigned_at": "2026-05-08T10:01:00Z"
+}
+```
+
+Logique d'acceptation (dans router.yml amélioré) :
+1. Si 1 seule bid → acceptation automatique (confidence > 70)
+2. Si N bids → accepter plus haute confidence (< 30s delay)
+3. Si confidence < 60 → attendre confirmation humaine (issue GitHub)
+
+#### 3. **Reputation & Scoring**
+
+Champs ajoutés à `skills/registry.json` :
+
+```json
+"claude-atelier@malik": {
+  "...": "...",
+  "reputation_score": 0.95,
+  "success_rate": 0.92,
+  "completed_count": 12,
+  "rejected_count": 1,
+  "avg_completion_hours": 2.5,
+  "last_active": "2026-05-08T09:30:00Z"
+}
+```
+
+**Calcul** (après chaque tâche complétée) :
+```
+reputation_score = (success_rate × 0.6) + (completion_speed_bonus × 0.2) + (idle_contribution × 0.2)
 ```
 
 ---
 
-## Roadmap phases
+## Intégration MasterClaude
 
-### Phase 1 : MVP (Semaine 1–2)
-- [ ] Task Broker HTTP + SQLite (parachute).
-- [ ] Agent Registry simple (JSON file + heartbeat).
-- [ ] Task Runner CLI (bid, report).
-- [ ] Ledger table + manual settlement.
-- [ ] Manual end-to-end test (Malik créateur, Idriss/Léonor exécuteurs).
+### Points d'intégration
 
-### Phase 2 : Auto-execution (Semaine 3–4)
-- [ ] Spawn Claude en session isolée depuis broker (worktree + context inject).
-- [ ] Output validation (schema check + signature verify).
-- [ ] Auto-heartbeat d'agents (hook SessionStart).
-- [ ] Task assignment → auto-accept si agent libre (daemon loop).
+#### 1. **Hook de détection idle** (master.js)
 
-### Phase 3 : Monétisation (Mois 2)
-- [ ] Intégration Anthropic API credit account.
-- [ ] Settlement automatique (chaque fin-de-tâche → ledger → credit transfer).
-- [ ] Dashboard (état ledger, agents actifs, tâches complétées).
-- [ ] Profit-sharing policy configurable.
+```javascript
+// scripts/master.js
 
-### Phase 4 : Décentralisation (Mois 3+)
-- [ ] Multi-Malik support (plusieurs utilisateurs = plusieurs instances parachute).
-- [ ] Ethereum/Polygon payment layer (optionnel — plus tard, si traction).
-- [ ] Cross-project task distribution (MasterClaude ↔ atelier ↔ autres repos).
+const MarketplaceListener = require('./services/marketplace-listener');
+
+class MasterDaemon {
+  async onSessionIdle(sessionId, duration) {
+    if (duration > 60000) { // > 1 min idle
+      const listener = new MarketplaceListener(this.sessionMgr, this.ghClient);
+      const annonces = await listener.pollOpenAnnonces();
+      const matches = annonces.filter(a => {
+        const score = listener.scoreMatch(session.agent, a);
+        return score > 80 && !a.deadline_passed;
+      });
+
+      if (matches.length > 0 && session.credits > 50) {
+        await listener.autoBid(sessionId, matches[0]); // Top score
+        console.log(`[MARKETPLACE] Auto-bid pour ${matches[0].skill}`);
+      }
+    }
+  }
+}
+```
+
+#### 2. **Configuration dans settings.json**
+
+```json
+{
+  "marketplace": {
+    "enabled": true,
+    "autoIdleThreshold": 60000,
+    "minCreditsForBid": 50,
+    "scoreThreshold": 80,
+    "autoBidEnabled": true,
+    "githubRepo": "malikkaraoui/atelier-marketplace",
+    "githubToken": "${GITHUB_TOKEN}"
+  }
+}
+```
+
+#### 3. **Webhook interne** (optionnel, mais recommandé)
+
+```javascript
+// services/marketplace-webhook-server.js
+const express = require('express');
+const app = express();
+
+app.post('/marketplace/new-annonce', async (req, res) => {
+  const { annonce_id, skill } = req.body;
+  const activeSession = this.sessionMgr.findIdleSessionWithSkill(skill);
+
+  if (activeSession) {
+    await this.listener.autoBid(activeSession.id, annonce_id);
+    res.json({ status: 'bid-triggered', session: activeSession.id });
+  } else {
+    res.json({ status: 'no-idle-agent', skill });
+  }
+});
+
+app.listen(3005, '127.0.0.1');
+```
 
 ---
 
-## Risques et questions ouvertes
+## NPM SDK & routing
 
-### Risques
+### Structure NPM
 
-| Risque | Probabilité | Mitigation |
-|--------|-------------|-----------|
-| **Timeout d'exécution** | Élevée | ETA souvent faux. Solution : deadline flexible + retry budget (3 tentatives). |
-| **Output non validable** | Moyenne | Spécifier schema strictement (JSON schema). Validateur dans broker. |
-| **Collision de ressources** (deux agents sur même file) | Moyenne | Mutex Redis ou SQLite row locking. |
-| **Credit abuse** (agent bid 1 crédit pour tâche 50-crédit) | Basse | Blanc-seing du créateur au moment du bid acceptance. Immuable. |
-| **Ghost tasks** (agent assign mais pas execute) | Moyenne | Timeout = 3× ETA → tâche back to open, bid fee déductible. |
-| **Anthropic API cost > revenue** | Élevée | MVP = pas monétisation. Phase 3 = pricing calibration. |
+```
+@atelier-marketplace/sdk
+├── src/
+│   ├── Client.ts            ← interface unifiée
+│   ├── adapters/
+│   │   ├── GitHubAdapter.ts  ← implémentation courante
+│   │   ├── ToMAdapter.ts     ← pour Phase 5
+│   │   └── FileAdapter.ts    ← local dev
+│   ├── types.ts             ← Annonce, Agent, Bid, etc.
+│   └── scoring.ts           ← matchScore(), reputationCalc()
+├── tests/
+├── package.json
+└── README.md
+```
 
-### Questions ouvertes
+### Client unifié
 
-1. **Monnaie** : Crédits API Anthropic ? Crypto ? Fiat ? → Réponse Phase 3.
-2. **Pricing** : Comment calibrer le prix par tâche ? Complexité ? Token count ? → À explorer.
-3. **Reputation** : Agents avec mauvaise track record → baissent-ils ? Ou kick-out ? → MVP = aucune, Phase 2 = simple score (tasks_completed / tasks_attempted).
-4. **Inter-project** : Les agents d'un projet peuvent-ils bidder sur tâches d'un autre ? → À décider (prob non en MVP).
-5. **Malik exclusivity** : C'est sa marketplace privée ? Ou open à d'autres users ? → Spec dit privé (son usage personnel), mais archit extensible.
+```typescript
+// usage
+import { MarketplaceClient } from '@atelier-marketplace/sdk';
+
+const client = new MarketplaceClient({
+  adapter: 'github', // ou 'tom', 'file'
+  credentials: { token: process.env.GITHUB_TOKEN }
+});
+
+// Poster annonce
+await client.postAnnonce({
+  skill: 'code-review',
+  description: 'Review handoff §25',
+  budget_credits: 50,
+  deadline: new Date(Date.now() + 24*3600*1000)
+});
+
+// Écouter & auto-bid
+client.on('new-annonce', async (annonce) => {
+  const score = client.calculateScore(myAgent, annonce);
+  if (score > 80) {
+    await client.placeBid(annonce.id, { confidence: score });
+  }
+});
+```
+
+### Adapters
+
+**GitHubAdapter** (v1 courant) :
+- Implémente `IMarketplaceAdapter`
+- Lit/écrit `open/`, `taken/`, `done/` via API GitHub
+- Polling tous les 10s (ou webhook GitHub)
+
+**ToMAdapter** (Phase 5) :
+- Utilise ToM-protocol comme transport
+- Identité signée (ed25519)
+- Batch + compression
+
+**FileAdapter** (Phase 1 local dev) :
+- Lit/écrit fichiers locaux
+- Pas de réseau, utile pour tester
 
 ---
 
-## Conclusion
+## Vision long-terme — crypto & ToM-protocol
 
-Cette spec trace un **marketplace peer-to-peer inter-agents opérationnel** en 2 semaines MVP, puis extensible vers monétisation. L'existant (Pinchwork, Project Deal) valide le concept ; aucun concurrent en prod open-source. MasterClaude a l'occasion d'être first-mover dans cette niche : **agents Claude autonomes qui se vendent du travail l'un l'autre**.
+### Phase 2 → Phase 5 (roadmap)
 
-**Next step** : valider l'architecture avec Malik, puis lancer Phase 1 (broker Go + CLI Node).
+| Phase | Livrables | Transport | Identité | Ledger |
+|-------|-----------|-----------|----------|--------|
+| **1 (MVP)** | Auto-bid, NPM SDK, registry amélioré | GitHub | `projet@user` | JSON |
+| **2** | Skills matching ML, réputation on-chain readiness | GitHub | `projet@user` + JWT | SQLite + blockchain snapshot |
+| **3** | Signatures ed25519, reputation immutable | GitHub + ToM | ed25519 clés | SQLite avec Merkle tree |
+| **4** | CLI `marketplace post\|take\|status` | ToM-protocol | ed25519 | On-chain (Polygon/Arb) |
+| **5** | Full ToM-protocol, staking, LP | ToM native | ed25519 + wallet | Blockchain |
+
+### Crypto integration (Phase 4+)
+
+**Pas de design détaillé dans v1**, mais infrastructure :
+
+1. **Ledger Merkle tree** : chaque transaction = hash, prouvable on-chain
+2. **Staking** : agents lock crédits pour boost reputation
+3. **LP** : échange crédits ↔ tokens ERC-20 (Uniswap)
+4. **Governance** : votes DAO sur skills catalog, fee structure
+
+**Détail** → `./ecosystem/crypto-roadmap.md` (non inclus v1)
+
+---
+
+## Chronologie & métriques
+
+### Jalons v1 MVP (mai 2026)
+
+| Date | Jalon | Dépendance |
+|------|-------|-----------|
+| 2026-05-15 | SDK NPM `0.1.0` published | Auto-bid code review OK |
+| 2026-05-20 | MasterClaude integration merged | Webhook interne testé |
+| 2026-05-25 | 5 agents inscrits POC | Registry + scoring finalisé |
+| 2026-06-01 | Auto-bid live (claude-atelier@malik idle) | Tous composants déployés |
+
+### Métriques suivi
+
+```json
+{
+  "marketplace": {
+    "agents_registered": 1,
+    "annonces_posted": 0,
+    "annonces_completed": 0,
+    "avg_bid_time": "N/A",
+    "auto_bid_success_rate": 0.0,
+    "total_credits_transacted": 0,
+    "reputation_avg": 1.0
+  }
+}
+```
+
+Mise à jour quotidienne dans vault (`vault/metrics/marketplace-daily.json`)
+
+---
+
+## Checklist d'implémentation v1
+
+- [ ] Adapter registry.json : ajouter `reputation_score`, `success_rate`, `completed_count`, `last_active`
+- [ ] Créer `MarketplaceListener` class dans `services/`
+- [ ] Implémenter `checkIdleStatus()` + `scoreMatch()` + `autoBid()`
+- [ ] Ajouter hook `onSessionIdle` dans `master.js`
+- [ ] Configuration marketplace dans `settings.json`
+- [ ] Router.yml amélioré : multi-bid + auto-accept logique
+- [ ] NPM SDK structure + GitHubAdapter
+- [ ] Tests : 15+ scénarios (idle detection, scoring, bid collision)
+- [ ] Documentation CLI & exemples
+- [ ] Déploiement POC : claude-atelier@malik en producteur + 2 agents biddeurs
+- [ ] Webhook GitHub + observabilité
+
+---
+
+## Références
+
+- **Repo POC** : https://github.com/malikkaraoui/atelier-marketplace
+  - `annonce.schema.json` (format annonce)
+  - `skills/registry.json` (agents + skills)
+  - `.github/workflows/router.yml` (orchestration)
+  - `ledger.json` (crédits)
+
+- **MasterClaude** : `/Users/malik/MasterClaude`
+  - `master.js` (daemon principal)
+  - `scripts/` (utilities)
+  - `.claude/CLAUDE.md` (règles runtime)
+
+---
+
+## Auteur & validation
+
+**Écrit par** : Claude Haiku 4.5 (MasterClaude session 2026-05-08)  
+**Revisité par** : [signature TODO]  
+**Déploiement** : [targeting 2026-06-01]
