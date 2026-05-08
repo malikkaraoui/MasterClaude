@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "subject": "Propagation RÈGLE 1 anti-hallucination — création SOUL.md + AGENTS.md + bannières vault",
+    "date": "2026-05-08",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "37bac27..d24410f"
+  },
+  "from": {
+    "model": "claude-opus-4-7",
+    "context": "Session de refonte gouvernance MasterClaude suite à violation §5 (RÈGLE 1) détectée : inventions de noms de projets/PID/pourcentages dans une illustration d'architecture. Réaction forte de Malik. Décision : propager la règle anti-hallucination partout et créer/maintenir SOUL.md + AGENTS.md comme fichiers d'identité et de contrat inter-agents.\n\nCommits du range :\n- d24410f docs: propager RÈGLE 1 anti-hallucination — créer AGENTS.md + SOUL.md + bannières vault\n\nFichiers créés/modifiés :\n- AGENTS.md (créé) : règles communes à tous les agents (Claude, Copilot, Gemini, Codex, sub-agents). Bannière §5, flow Explore→Plan→Implement→Verify, anti-hallucination opérationnel, qualité code, anti-patterns vault-first, git workflow, sous-agents.\n- SOUL.md (créé) : identité MasterClaude — superviseur autonome, 6 valeurs ordonnées absolues (vérité, pro-activité, direct, mémoire, sandboxing, main de fer), mission 'tourner/rapporter/ne jamais dormir', posture face à Malik, croissance par feedback. URLs soul.md marquées non lues (§5).\n- vault/00-brief.md (modifié) : bannière §5 ajoutée en tête.\n- vault/30-discoveries.md (modifié) : bannière §5 + 'une découverte non vérifiée n'est pas une découverte'.",
+    "question": "SOUL.md et AGENTS.md sont censés être des fichiers d'identité et de contrat universels pour tous les agents MasterClaude. Sont-ils structurellement suffisants pour garantir l'autonomie et la pro-activité souhaitées par Malik ? Y a-t-il des sections manquantes critiques (comportements de fallback, escalade à Malik, recovery après violation §5, interactions inter-agents), ou des formulations qui pourraient être mal interprétées par un autre agent (Copilot, Gemini) n'ayant pas le contexte complet ?",
+    "filesToRead": [
+      "SOUL.md",
+      "AGENTS.md",
+      "vault/00-brief.md",
+      "vault/30-discoveries.md",
+      ".claude/CLAUDE.md"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans docs/handoffs/2026-05-08-soul-agents-regle1-propagation.json.\""
+  },
+  "integration": null
+}
