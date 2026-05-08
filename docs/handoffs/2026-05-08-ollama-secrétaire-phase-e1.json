@@ -25,9 +25,11 @@
     ]
   },
   "response": {
-    "model": null,
-    "content": null,
-    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans docs/handoffs/2026-05-08-ollama-secrétaire-phase-e1.json.\""
+    "model": "github-copilot-pr-reviewer",
+    "content": "src/master/secretaire.js (ligne 6) : commentaire 'contexte conv persistant' trompeur — la Map est en mémoire et perdue au restart. Ajuster le commentaire ou implémenter une persistance. // src/master/secretaire.js (ligne 86) : faute de grammaire dans SYSTEM_PROMPT — 'Tu répondas' doit être 'Tu réponds'. Dégrade la qualité des réponses Ollama. // src/master/secretaire.js (ligne 80) : clearTimeout uniquement sur 'close' — en HTTP keep-alive, close peut ne pas se produire immédiatement après réponse. Risque de timer actif après résolution + double resolve/reject. Fix : settled flag + clearTimeout dans res.on('end') et error. // src/master/secretaire.js (ligne 19) : convHistory sans eviction par nombre de projectKey — Map peut croître sans borne sur un bot multi-projets. Ajouter cap global (LRU ou TTL). // src/master/secretaire.js (ligne 13) : OLLAMA_PORT via parseInt peut devenir NaN si env var invalide, faisant échouer http.request de façon peu explicite. Valider (Number.isFinite + plage 1-65535) avec fallback 11434 et log d'erreur."
   },
-  "integration": null
+  "integration": {
+    "retained_implement": "5 points Copilot appliqués : (1) commentaire ligne 6 corrigé en 'contexte en mémoire, non persistant', (2) faute corrigée 'Tu répondas' → 'Tu réponds' dans SYSTEM_PROMPT, (3) settled flag ajouté + clearTimeout déplacé dans res.on('end') et error handler pour éviter timer actif et double settle, (4) éviction LRU ajoutée — si Map > MAX_PROJECTS (50), suppression du projet le plus ancien avant insertion, (5) validation OLLAMA_PORT avec Number.isFinite + plage 1-65535 + fallback 11434 avec log stderr.",
+    "verdict": "5/5 points intégrés. Tous étaient légitimes : 2 bugs (timer + NaN port), 1 faute (SYSTEM_PROMPT), 2 dettes structurelles (commentaire trompeur + eviction Map). Aucun point rejeté. secretaire.js est maintenant robuste pour un daemon KeepAlive multi-projets."
+  }
 }
