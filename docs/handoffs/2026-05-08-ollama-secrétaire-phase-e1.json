@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "subject": "Secrétaire Ollama (Phase E1) + gouvernance SOUL.md/AGENTS.md + claude-mem v13.0.0",
+    "date": "2026-05-08",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "262a882..0ee1e80"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "9 commits, +270/-9 lignes depuis le dernier handoff intégré (d24410f — propagation RÈGLE 1). Commits couverts :\n- 262a882 docs: propager RÈGLE 1 anti-hallucination — créer AGENTS.md + SOUL.md + bannières vault\n- 4af3712 docs: handoff review SOUL.md + AGENTS.md — structure identité et contrat inter-agents\n- f9de17c fix: appliquer review Copilot #11 — remplir response + integration handoff soul-agents-regle1\n- c988a63 fix: corriger reviewedRange post-rebase (37bac27→f0fb49c)\n- 132e8c6 docs: enrichir SOUL.md — Decision Authority + Refus absolus + Tool Safety (Q&A Malik)\n- bfc093a docs: installer claude-mem v13.0.0 — mémoire sémantique inter-sessions + §0 + vault\n- cbd4a15 fix: CLAUDE.md 150 lignes — fusionner ligne claude-mem dans MCPs\n- 4e6b0a7 chore: archiver handoff migrate session 2026-05-07 (PR #10 mergée)\n- 0ee1e80 feat: intégrer secrétaire Ollama dans master.js — triage messages + réveil Claude via osascript\n\nLe commit principal est 0ee1e80 : création de src/master/secretaire.js (144 lignes) + injection dans bin/master.js + mise à jour test/ipc.test.js. La secrétaire Ollama remplace le message 'Claude est en veille' par un agent local (qwen3.5 via API REST /api/chat) qui : (1) trie les messages en 3 catégories (wake/complex/simple), (2) appelle wakeClaudeSession() via osascript pour les triggers wake, (3) maintient un contexte conversationnel en mémoire (Map par projectKey, MAX_HISTORY=10), (4) répond via Ollama pour les messages simple/complex avec suffix d'invite '@claude' pour les complexes.",
+    "question": "La secrétaire Ollama est intégrée comme module pur (pas de spawn/process séparé) dans master.js. Deux risques structurels : (1) Le contexte conversationnel (Map en mémoire) est perdu si master.js redémarre — est-ce acceptable ou faut-il persister dans SQLite/parachute ? (2) ollamaChat() n'a pas de circuit-breaker : si Ollama est down, chaque message attend 30s de timeout avant fallback — est-ce que le timeout de 30s est raisonnable pour un daemon KeepAlive ou faut-il un mécanisme de détection 'Ollama down' plus rapide (ex: health check périodique) ?",
+    "filesToRead": [
+      "src/master/secretaire.js",
+      "bin/master.js",
+      "test/ipc.test.js",
+      "SOUL.md",
+      "AGENTS.md"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans docs/handoffs/2026-05-08-ollama-secrétaire-phase-e1.json.\""
+  },
+  "integration": null
+}
