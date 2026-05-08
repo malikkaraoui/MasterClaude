@@ -4,7 +4,7 @@
     "date": "2026-05-08",
     "type": "review",
     "priority": "haute",
-    "reviewedRange": "37bac27..d24410f"
+    "reviewedRange": "f0fb49c..d24410f"
   },
   "from": {
     "model": "claude-opus-4-7",
