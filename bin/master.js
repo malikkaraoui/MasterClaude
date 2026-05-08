@@ -15,6 +15,7 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir, statSync as _stat } from 'node:fs';
 import { loadVaultBrief } from '../src/master/vault-loader.js';
+import { handleOffline } from '../src/master/secretaire.js';
 
 // Transcription daemon (TRANSCRIBE_SCRIPT défini après __dirname, ligne ~27)
 const TRANSCRIBE_SOCK = '/tmp/tg-transcribe.sock';
@@ -760,8 +761,8 @@ async function routeToClaude(userMsg, projectKey) {
       process.stdout.write(`[ipc] signal stale mais session ${claudePid} vivante — IPC direct\n`);
     } else {
       cleanupSignalFile();
-      process.stdout.write('[ipc] aucune session active — message en veille\n');
-      return '💤 Claude est en veille sur ce Mac. Ton message a été noté — dès qu\'une session s\'ouvre, tu peux renvoyer et j\'y réponds directement.';
+      process.stdout.write('[ipc] aucune session active — délégation secrétaire Ollama\n');
+      return handleOffline(userMsg, projectKey, send, wakeClaudeSession);
     }
   }
 
