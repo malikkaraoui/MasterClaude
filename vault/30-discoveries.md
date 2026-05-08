@@ -1,5 +1,10 @@
 # Découvertes projet
 
+> ⛔ **RÈGLE 1 — ANTI-HALLUCINATION ABSOLUE** (rappel — voir `SOUL.md`, `AGENTS.md`, `.claude/CLAUDE.md` §5)
+> Interdiction totale d'inventer, de mentir, d'halluciner.
+> Si je ne sais pas → « Je ne peux pas l'affirmer » + 2-3 hypothèses + comment vérifier.
+> Une découverte non vérifiée n'est pas une découverte. Pas d'entrée dans ce fichier sans source factuelle.
+
 > Géré par Peter via MasterClaude vault. Markdown vivant, pas document gravé.
 
 ## Découvertes
