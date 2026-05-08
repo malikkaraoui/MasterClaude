@@ -1,0 +1,30 @@
+{
+  "meta": {
+    "type": "migrate",
+    "date": "2026-05-07",
+    "timestamp": "14:26",
+    "triggered_by": "Telegram: Kill la session et téléporte toi avec tout ton package"
+  },
+  "state": {
+    "branch": "feat/compact-flow-robustness",
+    "head_sha": "80d15cc",
+    "pr_pending": {
+      "number": 10,
+      "title": "compact-flow-robustness handoff",
+      "status": "MERGEABLE, CI UNSTABLE",
+      "action": "gh pr merge 10 --rebase --delete-branch"
+    }
+  },
+  "context": {
+    "done": [
+      "PR #9 mergée dans main (master OUI/NON robustness — 3 fixes: guard claudePid, compact-count par PID, blocage non-OUI/NON)",
+      "PR #10 créée + Copilot review intégrée dans handoff JSON",
+      "reviewedRange corrigé post-rebase (37bac27→b14f183)",
+      "Telegram répondu: Alors? → PR #10 prête"
+    ],
+    "todo": [
+      "Merger PR #10: gh pr merge 10 --rebase --delete-branch",
+      "Architecture Telegram multi-bots (1 bot par projet) — à planifier"
+    ]
+  }
+}
