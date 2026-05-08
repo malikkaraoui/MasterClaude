@@ -21,7 +21,7 @@ last_review: 2026-05-08
 - **AGENTS.md** (ce fichier) → règles universelles applicables à TOUS les agents
 - **CLAUDE.md / GEMINI.md / `.github/copilot-instructions.md`** → delta propre à chaque agent
 - **SOUL.md** → identité, persona et posture de MasterClaude (lue à chaque session)
-- En cas de conflit AGENTS.md vs agent-spécifique → **AGENTS.md prime** sur les règles communes
+- En cas de conflit AGENTS.md vs agent-spécifique → **AGENTS.md prime** sur toute règle commune. Exception : un delta agent-spécifique peut **ajouter** des contraintes plus strictes (jamais assouplir). Toute dérogation doit être listée explicitement dans le fichier delta.
 
 ---
 
@@ -29,7 +29,7 @@ last_review: 2026-05-08
 
 **Explore → Plan → Implement → Verify.**
 
-- **Explore** : fichiers concernés uniquement (subagent Haiku si large)
+- **Explore** : fichiers concernés uniquement (subagent `Explore` / modèle léger si large)
 - **Plan** : impacts + dépendances avant d'écrire
 - **Implement** : minimal viable — Edit ciblé, jamais réécriture complète si > 20 lignes non modifiées
 - **Verify** : tests + gate pré-push
@@ -107,5 +107,5 @@ Jamais de clé/token en dur, `.gitignore` + `.claudeignore` obligatoires, `git p
 ## Sub-agents spawnés via Task
 
 - Héritent ce fichier d'office (chargé au démarrage Claude Code).
-- Skip écriture sur fichiers d'état globaux (`/tmp/masterclaude-*`) si `$CLAUDE_AGENT=1`.
+- Skip écriture sur fichiers d'état globaux (`/tmp/masterclaude-*`) si le sub-agent est spawné en isolation (worktree ou Task isolée) — la variable de détection est posée par le hook `SessionStart` du projet parent.
 - RÈGLE 1 = identique pour tous, sans dilution.
