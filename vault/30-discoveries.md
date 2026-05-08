@@ -11,6 +11,15 @@
 
 Ce que Claude ou Peter apprend sur le projet et qui mérite de survivre à la session.
 
+### 2026-05-08 — claude-mem v13.0.0 installé — mémoire sémantique inter-sessions
+
+- **Installé** : `npx claude-mem install --ide claude-code --provider claude --model claude-haiku-4-5-20251001`
+- **Worker** : daemon actif PID auto, port 37701, SQLite + Chroma vector DB dans `~/.claude-mem/`
+- **Mécanisme** : plugin Claude Code enregistré — capture automatique des observations via hooks (PostToolUse, Stop, SessionEnd). Retrieval sémantique sur sessions futures.
+- **Cohabitation** : `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` posé dans `~/.claude/settings.json` (désactive auto-memory native de Claude Code, pas notre hook custom SessionStart). Nos `memory/*.md` survivent et continuent à être lus via MEMORY.md.
+- **Gain** : recherche sémantique sur l'historique cross-sessions, ~10x moins de tokens pour récupérer le contexte pertinent. Mémoire passive — s'enrichit automatiquement.
+- **Commandes** : `npx claude-mem start|stop|status|search "<query>"`
+
 ### 2026-05-05 — Fork MasterClaude depuis claude-atelier v0.26.0
 
 - **Séparation décidée** : claude-atelier (npm) reste un harnais Claude Code pur. MasterClaude = usage personnel avec master daemon + Telegram + routing multi-projets
