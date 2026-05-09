@@ -492,7 +492,7 @@ function isPidAlive(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
-// Lit signal file → { valid, claudePid, ageS } (claudePid = parent_pid = process Claude Code)
+// Lit signal file → { valid, claudePid, ageS, ts } (claudePid = parent_pid = process Claude Code)
 function readSessionSignal() {
   if (!_exists(REAL_CLAUDE_ACTIVE_FILE)) return { valid: false };
   try {
@@ -503,13 +503,13 @@ function readSessionSignal() {
     const claudePid = parseInt(parts[2] || parts[1], 10);
     if (!ts) return { valid: false };
     const ageS = Math.round(Date.now() / 1000 - ts);
-    if (ageS > 3600) return { valid: false, ageS, claudePid };
+    if (ageS > 3600) return { valid: false, ageS, claudePid, ts };
     if (!isPidAlive(claudePid)) {
       process.stdout.write(`[ipc] signal vivant mais PID=${claudePid} mort — invalidation\n`);
       resetCompactCount(claudePid); // side-effect intentionnel : chemin erreur uniquement
-      return { valid: false, ageS, claudePid };
+      return { valid: false, ageS, claudePid, ts };
     }
-    return { valid: true, ageS, claudePid };
+    return { valid: true, ageS, claudePid, ts };
   } catch {
     return { valid: false };
   }
@@ -581,18 +581,26 @@ async function wakeClaudeSession() {
   const existingLock = readWakeLock();
   if (existingLock) {
     process.stdout.write(`[wake] wake déjà en cours (lock=${existingLock}) — attente du signal\n`);
+    const piggybackStartTs = Math.floor(Date.now() / 1000);
     for (let i = 0; i < 70; i++) {
       const sig = readSessionSignal();
-      if (sig.valid) {
-        process.stdout.write(`[wake] piggyback OK PID=${sig.claudePid}\n`);
+      if (sig.valid && sig.ts && sig.ts >= existingLock / 1000 - 2) {
+        process.stdout.write(`[wake] piggyback OK PID=${sig.claudePid} ts=${sig.ts}\n`);
         return true;
       }
       if (!_exists(WAKE_LOCK_FILE)) break; // wake initial a fini sans succès
       await new Promise(r => setTimeout(r, 500));
     }
-    return readSessionSignal().valid;
+    return false;
   }
   try { _wfs(WAKE_LOCK_FILE, `${Date.now()}\n`); } catch {}
+
+  // Horodatage avant spawn : un signal valide mais antérieur = ancienne session, pas la nouvelle.
+  const spawnStartTs = Math.floor(Date.now() / 1000);
+
+  // isFreshSignal : retourne true seulement si le signal a été écrit APRÈS le début du spawn.
+  // Tolérance de 2s pour couvrir le délai entre l'écriture de spawnStartTs et le démarrage du hook.
+  const isFreshSignal = (sig) => sig.valid && sig.ts && sig.ts >= spawnStartTs - 2;
 
   // FLAG_SESSION : déléguer le spawn à parachute (vault injecté automatiquement).
   if (FLAG_SESSION) {
@@ -604,7 +612,11 @@ async function wakeClaudeSession() {
       if (res.status === 201) {
         await send('🚀 Session Claude démarrée via parachute (vault injecté).').catch(() => {});
         for (let i = 0; i < 60; i++) {
-          if (readSessionSignal().valid) { try { _unlink(WAKE_LOCK_FILE); } catch {} return true; }
+          const sig = readSessionSignal();
+          if (isFreshSignal(sig)) {
+            process.stdout.write(`[wake] signal frais PID=${sig.claudePid} ts=${sig.ts}\n`);
+            try { _unlink(WAKE_LOCK_FILE); } catch {} return true;
+          }
           await new Promise(r => setTimeout(r, 500));
         }
         try { _unlink(WAKE_LOCK_FILE); } catch {}
@@ -612,12 +624,14 @@ async function wakeClaudeSession() {
         return false;
       }
       if (res.status === 409) {
-        // Déjà active — attendre le signal
+        // Session déjà active — attendre un signal frais (la session existante a peut-être un signal stale)
         for (let i = 0; i < 60; i++) {
-          if (readSessionSignal().valid) { try { _unlink(WAKE_LOCK_FILE); } catch {} return true; }
+          const sig = readSessionSignal();
+          if (isFreshSignal(sig)) { try { _unlink(WAKE_LOCK_FILE); } catch {} return true; }
           await new Promise(r => setTimeout(r, 500));
         }
         try { _unlink(WAKE_LOCK_FILE); } catch {}
+        // 409 = session déjà active, signal stale acceptable
         return readSessionSignal().valid;
       }
       process.stderr.write(`[wake] parachute spawn échoué (${res.status}) — fallback osascript\n`);
@@ -645,19 +659,19 @@ end tell`;
     await send(`❌ Réveil échoué — ${hint}`).catch(() => {});
     return false;
   }
-  process.stdout.write('[wake] Terminal lancé, attente du signal file…\n');
+  process.stdout.write('[wake] Terminal lancé, attente d\'un signal frais…\n');
   // Le hook SessionStart écrit le signal file → polling 30s max
   for (let i = 0; i < 60; i++) {
     const sig = readSessionSignal();
-    if (sig.valid) {
-      process.stdout.write(`[wake] session active PID=${sig.claudePid}\n`);
+    if (isFreshSignal(sig)) {
+      process.stdout.write(`[wake] session active PID=${sig.claudePid} ts=${sig.ts}\n`);
       try { _unlink(WAKE_LOCK_FILE); } catch {}
       return true;
     }
     await new Promise(r => setTimeout(r, 500));
   }
   try { _unlink(WAKE_LOCK_FILE); } catch {}
-  process.stderr.write('[wake] timeout 30s — pas de signal file détecté\n');
+  process.stderr.write('[wake] timeout 30s — pas de signal frais détecté\n');
   await send('⚠️ Session Claude semble lancée mais le signal IPC n\'est pas arrivé. Vérifie le terminal.').catch(() => {});
   return false;
 }
