@@ -2,15 +2,21 @@
 //
 // Endpoints :
 //
-//	GET  /health                              → liveness + version
-//	GET  /v1/handoff/{projectKey}             → récupère le handoff live (404 si absent)
-//	POST /v1/handoff/{projectKey}             → écrit le handoff (overwrite + archive)
-//	POST /v1/handoff/{projectKey}/consume     → lit + supprime le handoff (atomique)
-//	GET  /v1/projects                         → liste les projets avec handoff actif
-//	GET  /v1/sessions                         → liste les sessions Claude actives
-//	POST /v1/sessions/{projectKey}/spawn      → spawn une session Claude (vault + handoff injectés)
-//	POST /v1/sessions/{projectKey}/heartbeat  → mise à jour heartbeat (session vivante)
-//	DELETE /v1/sessions/{projectKey}          → kill propre de la session
+//	GET  /health                                    → liveness + version
+//	GET  /v1/handoff/{projectKey}                   → récupère le handoff live (404 si absent)
+//	POST /v1/handoff/{projectKey}                   → écrit le handoff (overwrite + archive)
+//	POST /v1/handoff/{projectKey}/consume           → lit + supprime le handoff (atomique)
+//	GET  /v1/projects                               → liste les projets avec handoff actif
+//	GET  /v1/sessions                               → liste les sessions Claude actives
+//	POST /v1/sessions/{projectKey}/spawn            → spawn une session Claude (vault + handoff injectés)
+//	POST /v1/sessions/{projectKey}/heartbeat        → mise à jour heartbeat (session vivante)
+//	DELETE /v1/sessions/{projectKey}                → kill propre de la session
+//	POST /v1/bus/messages                           → envoyer un message inter-agents
+//	GET  /v1/bus/messages/pending/{agentId}         → messages en attente pour un agent
+//	POST /v1/bus/messages/{msgId}/ack               → acquitter un message
+//	POST /v1/bus/agent_configs/{agentId}            → enregistrer config d'un executor
+//	GET  /v1/bus/agent_configs/{agentId}            → lire config d'un executor
+//	GET  /v1/bus/agent_configs                      → lister toutes les configs
 //
 // Auth : token bearer optionnel via PARACHUTE_TOKEN.
 package server
@@ -26,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/malikkaraoui/MasterClaude/parachute/internal/bus"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/dashboard"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/sessions"
 	"github.com/malikkaraoui/MasterClaude/parachute/internal/store"
@@ -33,11 +40,12 @@ import (
 
 const alertsFile = "/tmp/parachute-alerts.jsonl"
 
-const Version = "0.2.0"
+const Version = "0.3.0"
 
 type Server struct {
 	store   *store.Store
 	manager *sessions.Manager
+	bus     *bus.Bus
 	token   string
 	mux     *http.ServeMux
 	start   time.Time
@@ -51,6 +59,7 @@ func NewWithSessions(s *store.Store, token string, mgr *sessions.Manager) *Serve
 	srv := &Server{
 		store:   s,
 		manager: mgr,
+		bus:     bus.New(),
 		token:   token,
 		mux:     http.NewServeMux(),
 		start:   time.Now(),
@@ -126,6 +135,13 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /v1/sessions/{projectKey}/spawn", s.guard(s.handleSpawnSession))
 	s.mux.HandleFunc("POST /v1/sessions/{projectKey}/heartbeat", s.guard(s.handleHeartbeat))
 	s.mux.HandleFunc("DELETE /v1/sessions/{projectKey}", s.guard(s.handleKillSession))
+	// Bus inter-agents v2
+	s.mux.HandleFunc("POST /v1/bus/messages", s.guard(s.handleBusPost))
+	s.mux.HandleFunc("GET /v1/bus/messages/pending/{agentId}", s.guard(s.handleBusPending))
+	s.mux.HandleFunc("POST /v1/bus/messages/{msgId}/ack", s.guard(s.handleBusAck))
+	s.mux.HandleFunc("POST /v1/bus/agent_configs/{agentId}", s.guard(s.handleBusPutAgentConfig))
+	s.mux.HandleFunc("GET /v1/bus/agent_configs/{agentId}", s.guard(s.handleBusGetAgentConfig))
+	s.mux.HandleFunc("GET /v1/bus/agent_configs", s.guard(s.handleBusListAgentConfigs))
 }
 
 func (s *Server) guard(h http.HandlerFunc) http.HandlerFunc {
