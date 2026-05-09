@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "subject": "Parachute v0.3.0 — bus inter-agents + dispatcher master.js + EXECUTOR Tier1 + routing-check fix",
+    "date": "2026-05-09",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "391295c2f461377ec63ebfbf2fe0e909dc093beb..2296f1643fd961ae13ceeb6e26d987e509521005"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "12 commits feat/fix depuis dernier handoff intégré (391295c). Livraisons majeures : (1) feat: parachute v2 message bus inter-agents — 5 endpoints HTTP POST/GET/ACK + agent_configs CRUD, bus.go avec mutex RWMutex, gc() pending-safe, copies thread-safe (66fe431). (2) fix: Copilot #17 — retour de copies dans Pending/GetAgentConfig/ListAgentConfigs pour éviter race post-unlock, GC préserve messages non-acquittés, MaxBytesReader 64KB sur POST bus (c517609). (3) feat: bus dispatcher dans master.js — polling /v1/bus/messages toutes 30s, dispatch commandes compact_req/spawn_session/kill_session/vault_sync (4e2da1c). (4) feat: EXECUTOR template + deploy-executor.sh — déploiement .claude/EXECUTOR.md + hook executor-ctx-monitor.sh + settings.json merge sur 5 projets Tier1 (Co-Pilot, DECISIO, HULK_WORK_AI, SCRIPT.IA, tom-protocol) (120b7c3). (5) fix: routing-check SWITCH_MODE M quand triage=true et proxy up (c392bd1). (6) fix: LaunchAgent ollama-proxy absent + DIAGNOSTICS invariant 3 services (3790b23). Tests HTTP bus : 8 tests d'intégration via httptest.Server (bus_handlers_test.go).",
+    "question": "Le dispatcher master.js poll /v1/bus/messages toutes 30s sans backoff ni circuit-breaker. Si le daemon parachute est KO, master.js va spammer les logs avec des erreurs réseau en boucle. Faut-il ajouter un backoff exponentiel ou un circuit-breaker, et si oui, où (master.js ou côté parachute health check) ?",
+    "filesToRead": [
+      "parachute/internal/bus/bus.go",
+      "parachute/internal/server/bus_handlers.go",
+      "parachute/internal/server/bus_handlers_test.go",
+      "bin/master.js",
+      "scripts/deploy-executor.sh",
+      "templates/EXECUTOR.md",
+      "parachute/internal/server/server.go"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
