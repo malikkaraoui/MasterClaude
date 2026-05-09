@@ -194,4 +194,13 @@ Ce que Claude ou Peter apprend sur le projet et qui mérite de survivre à la se
 - **IPC resilient** : Monitor guard, session signal TTL, zombie process fix parachute
 - **Seeding mémoire** : découvertes documentées vault/30-discoveries.md + observations claude-mem cross-sessions
 
+### 2026-05-09 — Parachute v0.3.0 : bus inter-agents + EXECUTOR Tier 1 + deploy guard
+
+- **Bus inter-agents livré** : `parachute/internal/bus/bus.go` — message bus in-memory thread-safe (Post/Pending/Ack/AgentConfig). 6 endpoints HTTP `/v1/bus/*` + 8 tests d'intégration HTTP. Version parachute : `0.3.0`.
+- **Fixes thread-safety** (review Copilot #17) : `Pending`/`GetAgentConfig`/`ListAgentConfigs` retournent des copies (pas de race post-unlock) ; `gc()` préserve les messages non-acquittés lors de troncature > 400 ; `MaxBytesReader` 64KB sur POST messages + POST agent_configs.
+- **Dispatcher master.js** : `pollBusMessages()` toutes les 30s — dispatch 5 types (task_done, heartbeat, compact_req, compact_done, restart_notify) avec ACK automatique et feedback loop Telegram.
+- **EXECUTOR Tier 1 déployé** : 5 projets — Co-Pilot, DECISIO, HULK_WORK_AI, SCRIPT.IA, tom-protocol. Chaque projet reçoit `.claude/EXECUTOR.md` + hook `executor-ctx-monitor.sh` (POST bus si ctx ≥ 35%) + settings.json mergé.
+- **Guard deploy-executor.sh** : `[ -d "$PROJECT_PATH" ]` ajouté avant toute écriture — évite la création silencieuse de répertoires fantômes sur chemin invalide.
+- **Pattern observé** : `CronCreate durable: true` ne persiste pas dans cette env (retourne "Session-only" malgré le flag). Pour la continuité nuit, utiliser `ScheduleWakeup` < 270s (cache warm) ou accepter la perte au redémarrage session.
+
 ### YYYY-MM-DD — Découverte
