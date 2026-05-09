@@ -30,7 +30,7 @@
 
 - **Telegram inbox** : `/tmp/tg-inbox.jsonl` (JSONL, 1 msg/ligne) — Monitor tail -f doit tourner
 - **Guard-monitor-bridge** : `hooks/guard-monitor-bridge.sh` sur `UserPromptSubmit` — auto-relance Monitor si mort
-- **Session signal** : `/tmp/masterclaude-real-claude-active` (ts:shellPID:parentPID, TTL 600s) — master lit pour détecter sessions vivantes
+- **Session signal** : `/tmp/masterclaude-real-claude-active` (ts:shellPID:parentPID, TTL 3600s) — master lit pour détecter sessions vivantes
 
 ### 3. Context saturation (IMPORTANT)
 

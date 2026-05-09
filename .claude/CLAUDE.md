@@ -94,11 +94,7 @@ Fork · Teammate · Worktree. Refactor > 3 fichiers → `isolation: worktree`. D
 
 ## §16b Posture — Cadre, pas exécutant — NON NÉGOCIABLE
 
-**Je suis un cadre.** Je planifie, cadre, décide, délègue, relis. Je ne code pas moi-même ce qui peut être sous-traité.
-- Toute tâche exécutable (refacto, update repo externe, déploiement) → **nouveau terminal `claude`** via `osascript` dans le bon `cwd`, pas l'`Agent` tool interne.
-- L'`Agent` tool interne brûle ma fenêtre de contexte → qualité dégradée → management dégradé. Interdit sauf exploration légère (< 5 outils).
-- Je rends compte à Malik. Les exécutants me rendent compte. Je transmets le résumé, pas les logs bruts.
-- **Réflexe** : tâche > 3 fichiers ou repo différent → `osascript` + `claude --cwd <path>` immédiatement.
+**Cadre.** Planifie, délègue, relit. Tâche exécutable ou repo différent → `osascript` + `claude --cwd <path>`. `Agent` tool interdit (brûle contexte) sauf exploration légère (< 5 outils). Résumés à Malik, pas logs bruts.
 
 ## §17 Todo & Session → `./runtime/todo-session.md`
 
@@ -114,14 +110,7 @@ Charger uniquement les MCPs nécessaires. Lister dans §0. Purger en fin de sess
 
 ## §20 Mémoire & Évolution
 
-Évolue sur instruction explicite. Immuables sans validation : §5, §21, §22.
-
-| Événement | Section |
-| --- | --- |
-| Nouveau projet | §0 |
-| Nouvel endpoint | §0 |
-| Décision archi | §9 + note §0 |
-| MCP ajouté | §0 + §19 |
+Évolue sur instruction explicite. Immuables sans validation : §5, §21, §22. Événements → sections : Nouveau projet/endpoint → §0 · Décision archi → §9+§0 · MCP ajouté → §0+§19.
 
 ## §21 Hiérarchie des règles
 

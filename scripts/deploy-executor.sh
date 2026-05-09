@@ -24,7 +24,7 @@ echo "  ✅ .claude/EXECUTOR.md"
 # 3. Créer hook executor-ctx-monitor.sh
 cat > "$PROJECT_PATH/.claude/hooks/executor-ctx-monitor.sh" << HOOKEOF
 #!/bin/bash
-# executor-ctx-monitor.sh — Surveille le contexte et alerté MasterClaude
+# executor-ctx-monitor.sh — Surveille le contexte et alerter MasterClaude
 CTX_FILE="/tmp/masterclaude-ctx-pct"
 [ ! -f "\$CTX_FILE" ] && exit 0
 CTX=\$(cat "\$CTX_FILE" 2>/dev/null)

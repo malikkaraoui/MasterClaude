@@ -43,7 +43,7 @@
 | --- | --- | --- | --- | --- |
 | Telegram inbox | /tmp/tg-inbox.jsonl | Telegram → master → Claude | JSONL (1 msg/line) | None (persistent until read) | Monitor tool tail -f |
 | Telegram responses | /tmp/tg-responses/{chatId}.jsonl | Claude → master → Telegram | JSONL | None | Master polls dir |
-| Session signal | /tmp/masterclaude-real-claude-active | master ← Claude | ts:shellPID:parentPID | 600s (TTL check) | Master detects alive sessions |
+| Session signal | /tmp/masterclaude-real-claude-active | master ← Claude | ts:shellPID:parentPID | 3600s (TTL check) | Master detects alive sessions |
 | Window registry | /tmp/masterclaude-windows.json | window-registry.js | JSON | Lost at reboot (intentional) | registerWindow → tracking |
 | Transcription | /tmp/tg-transcribe.sock | Telegram → Python worker | Unix socket | Lifetime of worker | Whisper async |
 | Parachute socket | /tmp/parachute.sock | master ↔ parachute | HTTP (upgradeable WebSocket) | Session lifetime | Bearer token auth |
