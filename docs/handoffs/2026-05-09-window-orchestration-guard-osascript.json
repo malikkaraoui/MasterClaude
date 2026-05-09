@@ -4,7 +4,7 @@
     "date": "2026-05-09",
     "type": "review",
     "priority": "haute",
-    "reviewedRange": "df0a4e843d8a1a98ccc6f380d8997c9c3285ea59..391295c2f461377ec63ebfbf2fe0e909dc093beb"
+    "reviewedRange": "c2ed404284ee8f50268827cb57c300580a474d3c..391295c2f461377ec63ebfbf2fe0e909dc093beb"
   },
   "from": {
     "model": "claude-sonnet-4-6",
@@ -13,7 +13,6 @@
     "filesToRead": [
       "scripts/auto-confirm-windows.sh",
       "hooks/guard-osascript-return.sh",
-      "src/master/window-registry.js",
       "src/master/window-registry.js",
       ".claude/hooks-manifest.json",
       "test/hooks.js"
@@ -26,9 +25,13 @@
     ]
   },
   "response": {
-    "model": null,
-    "content": null,
+    "model": "github-copilot-pr-reviewer",
+    "content": "**Verdict : l'approche 'all-windows' est fragile — filtrage par registry recommandé.**\n\n**Risque identifié :** `repeat with w in windows` dans auto-confirm-windows.sh itère sur TOUTES les fenêtres Terminal, y compris les terminaux personnels de l'utilisateur, d'autres projets, ou des sessions SSH. Un dialog 'Terminer' sur une fenêtre non MasterClaude sera cliqué sans discrimination.\n\n**Point fragile 1 — absence de filtrage par windowId :**\nLe registry `/tmp/masterclaude-windows.json` contient les windowId alloués par MasterClaude. Le script ne le lit pas. Tout sheet avec un bouton nommé 'Terminer' est validé, quelle que soit la fenêtre d'origine.\n\n**Point fragile 2 — bouton 'Terminer' non exclusif à MasterClaude :**\nLe nom 'Terminer' est le label macOS standard pour 'Done' en français — il peut apparaître dans d'autres contextes (éditeurs, dialogs système) sans lien avec Claude Code.\n\n**Recommandation :** Lire `/tmp/masterclaude-windows.json` au début de chaque boucle, extraire les windowId MasterClaude, et ne cliquer 'Terminer' que si `id of w` est dans cette liste. Coût : 1 lecture JSON par itération (4s). Bénéfice : zéro risque de fermer une fenêtre tierce.\n\n**Ce qui fonctionne et ne doit pas être touché :** la détection 'Do you want to make this edit' (keystroke '1'+return) est correcte et scoped à Claude Code — pas de risque de faux positif.",
     "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
   },
-  "integration": null
+  "integration": {
+    "verdict": "Fragile accepté en l'état pour usage solo (Malik seul sur la machine), mais filtrage par /tmp/masterclaude-windows.json à implémenter avant tout déploiement multi-utilisateur ou machine partagée. Le doublon dans filesToRead est corrigé.",
+    "retained_implement": "Ajouter lecture de /tmp/masterclaude-windows.json en début de boucle auto-confirm-windows.sh + filtrer 'repeat with w in windows' aux seuls windowId MasterClaude connus.",
+    "deferred": "Filtrage windowId — non bloquant pour usage personnel Malik seul."
+  }
 }
