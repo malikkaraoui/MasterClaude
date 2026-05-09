@@ -25,9 +25,11 @@
     ]
   },
   "response": {
-    "model": null,
-    "content": null,
-    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+    "model": "github-copilot-pr-reviewer",
+    "content": "Deux points critiques identifiés. (1) Erreur sémantique dans from.context : deploy-executor.sh n'utilise pas osascript — il copie des fichiers et patche settings.json via jq, sans aucune interaction osascript. La question initiale est donc basée sur une prémisse incorrecte. (2) Validation de chemin insuffisante : deploy-executor.sh ne vérifie pas que PROJECT_PATH est un répertoire réellement existant avant d'appeler mkdir -p et sed. Si le chemin est invalide (ex: typo), mkdir -p crée un arbre de répertoires fantôme et sed écrit dans un projet inexistant sans erreur visible. Le flag set -euo pipefail protège contre les erreurs de commandes, mais pas contre un chemin syntaxiquement valide mais sémantiquement incorrect. Recommandation : ajouter [ -d \"$PROJECT_PATH\" ] || { echo \"ERREUR: $PROJECT_PATH inexistant\"; exit 1; } en tête du script avant toute écriture."
   },
-  "integration": null
+  "integration": {
+    "retained_implement": "Correction sémantique documentée dans vault/30-discoveries.md : deploy-executor.sh n'utilise pas osascript (contrairement à ce que from.context indiquait). Validation de chemin ajoutée en tête du script : guard [ -d \"$PROJECT_PATH\" ] avant toute écriture.",
+    "verdict": "Review intégrée. Deux fixes appliqués : (1) guard de validation du chemin projet dans deploy-executor.sh — évite la création silencieuse de répertoires fantômes sur chemin invalide ; (2) documentation de la correction sémantique osascript dans le vault. Aucun autre point bloquant identifié sur les 15 fichiers du range 391295c..c392bd1."
+  }
 }
