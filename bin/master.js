@@ -1076,6 +1076,64 @@ while (running) {
         continue;
       }
 
+      // /spawn [projet] → spawn session claude interactive via parachute
+      if (text === '/spawn' || text.startsWith('/spawn ')) {
+        const projectArg = text.startsWith('/spawn ') ? text.slice(7).trim() : null;
+        const projectKey = projectArg || sessions.active?.name || 'MasterClaude';
+        const cwd = sessions.active?.path || ROOT;
+        await send(`🚀 Spawn session claude pour ${projectKey}…`);
+        try {
+          const res = await parachuteRequest('POST', `/v1/sessions/${encodeURIComponent(projectKey)}/spawn`, { cwd });
+          if (res.status === 201 || res.status === 200) {
+            await send(`✅ Session claude ouverte dans Terminal (projet: ${projectKey})`).catch(() => {});
+          } else if (res.status === 409) {
+            await send(`ℹ️ Session ${projectKey} déjà active`).catch(() => {});
+          } else {
+            await send(`❌ Spawn échoué (HTTP ${res.status})`).catch(() => {});
+          }
+        } catch (e) {
+          await send(`❌ Erreur spawn: ${e.message}`).catch(() => {});
+        }
+        continue;
+      }
+
+      // /sessions → liste les sessions claude actives via parachute
+      if (text === '/sessions') {
+        try {
+          const res = await parachuteRequest('GET', '/v1/sessions', null);
+          const data = res.body || {};
+          const list = data.sessions || [];
+          if (list.length === 0) {
+            await send('Aucune session claude active.').catch(() => {});
+          } else {
+            const lines = list.map(s =>
+              `• ${s.ProjectKey} | PID ${s.Pid} | cwd: ${s.Cwd} | démarré ${new Date(s.StartedAt).toLocaleTimeString('fr-FR')}`
+            );
+            await send(`Sessions actives (${list.length}) :\n${lines.join('\n')}`).catch(() => {});
+          }
+        } catch (e) {
+          await send(`❌ Erreur /sessions: ${e.message}`).catch(() => {});
+        }
+        continue;
+      }
+
+      // /kill [projet] → kill session claude via parachute
+      if (text === '/kill' || text.startsWith('/kill ')) {
+        const projectArg = text.startsWith('/kill ') ? text.slice(6).trim() : null;
+        const projectKey = projectArg || sessions.active?.name || 'MasterClaude';
+        try {
+          const res = await parachuteRequest('DELETE', `/v1/sessions/${encodeURIComponent(projectKey)}`, null);
+          if (res.status === 200) {
+            await send(`✅ Session ${projectKey} terminée`).catch(() => {});
+          } else {
+            await send(`❌ Kill échoué (HTTP ${res.status})`).catch(() => {});
+          }
+        } catch (e) {
+          await send(`❌ Erreur /kill: ${e.message}`).catch(() => {});
+        }
+        continue;
+      }
+
       // Message → Claude (single path : IPC vers session active, auto-wake si absente)
       const projectKey = sessions.active?.name || 'global';
       try {
