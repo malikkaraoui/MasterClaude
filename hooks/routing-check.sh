@@ -609,18 +609,5 @@ if [ "$RUN_DIAGNOSTIC" = true ]; then
   fi
 fi
 
-# ===== §1 ENTÊTE OBLIGATOIRE — béton armé =====
-if [ -z "$_F_HEADER" ]; then exit 0; fi
-# Injecté en dernier pour être le plus proche de la réponse.
-_HDR_TS="$(date '+%Y-%m-%d %H:%M:%S')"
-_HDR_MODEL="$MODEL"
-_HDR_MODE="$SWITCH_MODE"
-_HDR_OLLAMA=$(cat /tmp/claude-atelier-ollama-indicator 2>/dev/null | tr -d '\r\n')
-_HDR_OLLAMA_PART="${_HDR_OLLAMA:+ | $_HDR_OLLAMA}"
-_HDR_PROXY=$(is_ollama_proxy_healthy && echo "🔌✅" || echo "🔌❌")
-echo ""
-echo "⚡⚡⚡ §1 ENTÊTE OBLIGATOIRE ⚡⚡⚡"
-echo "Ta réponse DOIT commencer par (1ère ligne, exactement) :"
-echo "\`[$_HDR_TS | $_HDR_MODEL] PASTILLE $_HDR_MODE${_HDR_OLLAMA_PART} | $_HDR_PROXY | CTX\`"
-echo "PASTILLE = pastille issue de [METRICS] (⬆️ / ⬇️ / 🟢) — 🟢 si [METRICS] absent"
-echo "CTX = fenêtre de contexte issue de [CTX] (ex: 23%✅ si <50%, 67%🔥 si ≥50%) — omettre ENTIÈREMENT si [CTX] absent ou valeur = 0"
+# §1 ENTÊTE — source unique : model-metrics.sh (⚡ §1 ENTÊTE FINAL)
+# Ce bloc supprimé — routing-check ne génère plus de template concurrent.

@@ -442,7 +442,7 @@ function readSessionSignal() {
     const claudePid = parseInt(parts[2] || parts[1], 10);
     if (!ts) return { valid: false };
     const ageS = Math.round(Date.now() / 1000 - ts);
-    if (ageS > 600) return { valid: false, ageS, claudePid };
+    if (ageS > 3600) return { valid: false, ageS, claudePid };
     if (!isPidAlive(claudePid)) {
       process.stdout.write(`[ipc] signal vivant mais PID=${claudePid} mort — invalidation\n`);
       resetCompactCount(claudePid); // side-effect intentionnel : chemin erreur uniquement
@@ -535,8 +535,8 @@ async function wakeClaudeSession() {
 
   // FLAG_SESSION : déléguer le spawn à parachute (vault injecté automatiquement).
   if (FLAG_SESSION) {
-    const projectKey = sessions.active?.name || 'global';
-    const cwd = sessions.active ? sessions.active.path : ROOT;
+    const projectKey = sessions.active?.name || 'MasterClaude';
+    const cwd = ROOT; // toujours MasterClaude par défaut sauf session explicite
     try {
       const res = await parachuteRequest('POST', `/v1/sessions/${encodeURIComponent(projectKey)}/spawn`, { cwd });
       process.stdout.write(`[wake] parachute spawn status=${res.status} project=${projectKey}\n`);
@@ -669,7 +669,7 @@ async function executeMigration(claudePid, projectKey, reason) {
   if (FLAG_HANDOFF && FLAG_SESSION) {
     try {
       const handoffBody = JSON.parse(_rfs(handoffFile, 'utf8'));
-      const cwd = sessions.active ? sessions.active.path : ROOT;
+      const cwd = ROOT; // toujours MasterClaude par défaut
       const res = await parachuteSocketRequest('POST', '/v1/migrate', {
         project_key: projectKey,
         cwd,
