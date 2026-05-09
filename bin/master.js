@@ -577,7 +577,11 @@ end tell`;
   if (r.status !== 0) {
     try { _unlink(WAKE_LOCK_FILE); } catch {}
     process.stderr.write(`[wake] osascript échec (status=${r.status}): ${r.stderr}\n`);
-    await send('❌ Réveil échoué — autorise Terminal.app dans Réglages → Confidentialité → Automation, puis réessaie.').catch(() => {});
+    const stderrSnip = (r.stderr || '').slice(0, 120).trim();
+    const hint = stderrSnip.includes('not allowed') || stderrSnip.includes('autorisation')
+      ? 'autorise Terminal.app dans Réglages → Confidentialité → Automation'
+      : stderrSnip || 'pas de session GUI — lance Terminal.app manuellement';
+    await send(`❌ Réveil échoué — ${hint}`).catch(() => {});
     return false;
   }
   process.stdout.write('[wake] Terminal lancé, attente du signal file…\n');

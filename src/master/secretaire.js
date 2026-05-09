@@ -105,11 +105,9 @@ export async function handleOffline(msg, projectKey, send, wakeClaudeFunc) {
 
   if (kind === 'wake') {
     await send('⏳ Réveil de Claude en cours…').catch(() => {});
-    const ok = await wakeClaudeFunc().catch(() => false);
-    if (ok) {
-      return '✅ Claude est réveillé — envoie ton message à nouveau, il répond directement.';
-    }
-    return '❌ Réveil échoué. Vérifie que Terminal.app a accès à Automation dans les Réglages Confidentialité.';
+    await wakeClaudeFunc().catch(() => false);
+    // wakeClaudeFunc (wakeClaudeSession) envoie ses propres messages (🚀, ❌, ⚠️)
+    return '';
   }
 
   // Éviction LRU : si trop de projets, supprimer le plus ancien
@@ -144,7 +142,6 @@ export async function handleOffline(msg, projectKey, send, wakeClaudeFunc) {
     : '';
 
   const fullReply = reply + suffix;
-  await send(fullReply).catch(() => {});
   return fullReply;
 }
 
