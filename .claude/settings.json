@@ -160,6 +160,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-osascript-return.sh\""
+          },
+          {
+            "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/guard-no-sign.sh\"",
             "if": "Bash(*git commit*)"
           },
