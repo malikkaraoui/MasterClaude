@@ -6,7 +6,7 @@
 | Clé | Valeur |
 | --- | --- |
 | Projet courant | MasterClaude (runtime Claude Code autonome — usage personnel) |
-| Phase | v0.1.0 — fork initial depuis claude-atelier v0.26.0 · next: LaunchAgent daemon opérationnel + routing Telegram multi-projets |
+| Phase | v0.2.0 — E1 livré (secrétaire Ollama + triage Telegram + auto-confirm fenêtres) · next: E2 session-manager (spawn/monitor sessions `claude` par projet) |
 | Stack | Node.js (daemon/hooks/scripts) + Go (ollama-proxy) + Python (Telegram bridge) |
 | Repo | malikkaraoui/MasterClaude |
 | Path local | /Users/malik/MasterClaude |
