@@ -46,6 +46,22 @@ which claude
 # Expected: /usr/local/bin/claude (ou ~/.claude/local/claude)
 ```
 
+## LaunchAgents obligatoires — Invariant non négociable
+
+Tout service utilisé par master.js **doit** avoir un LaunchAgent KeepAlive. Si l'un manque → l'ajouter immédiatement.
+
+| Service | LaunchAgent | Port |
+|---|---|---|
+| master daemon | `com.masterclaude.daemon.plist` | — |
+| parachute | `com.masterclaude.parachute.plist` | :4001 |
+| ollama-proxy | `com.masterclaude.ollama-proxy.plist` | :4000 |
+
+```bash
+# Vérifier que les 3 sont chargés
+launchctl list | grep masterclaude
+# Expected: 3 lignes (daemon, parachute, ollama-proxy)
+```
+
 ## Red Flags — Si ça échoue
 
 | Check | Issue | Fix |
