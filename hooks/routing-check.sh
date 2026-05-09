@@ -225,12 +225,23 @@ fi
 SWITCH_MODE_FILE="$BASE_TMP/claude-atelier-switch-mode"
 
 if is_ollama_proxy_healthy; then
-  SWITCH_MODE="A"
-  echo "A" > "$SWITCH_MODE_FILE"
+  _RC_TRIAGE=$(python3 -c "
+import json, os
+cfg = '$REPO_ROOT/scripts/ollama-proxy/config.json'
+try:
+    d = json.load(open(cfg))
+    print(str(d.get('triage', True)).lower())
+except: print('true')
+" 2>/dev/null)
+  if [ "$_RC_TRIAGE" = "false" ]; then
+    SWITCH_MODE="A"
+  else
+    SWITCH_MODE="M"
+  fi
 else
   SWITCH_MODE="M"
-  echo "M" > "$SWITCH_MODE_FILE"
 fi
+echo "$SWITCH_MODE" > "$SWITCH_MODE_FILE"
 
 # ===== OLLAMA STATUS (chaque message) =====
 OLLAMA_STATUS=""
