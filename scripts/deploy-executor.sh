@@ -9,6 +9,7 @@ PROJECT_PATH="${1:?Usage: deploy-executor.sh <project_path> <project_id>}"
 PROJECT_ID="${2:?Usage: deploy-executor.sh <project_path> <project_id>}"
 MASTER_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEMPLATE="$MASTER_ROOT/templates/EXECUTOR.md"
+[ -d "$PROJECT_PATH" ] || { echo "ERREUR: $PROJECT_PATH n'est pas un répertoire existant"; exit 1; }
 echo "▶ Déploiement exécutant: $PROJECT_ID → $PROJECT_PATH"
 
 # 1. Créer .claude/ si absent
