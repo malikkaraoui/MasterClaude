@@ -9,8 +9,6 @@ PROJECT_PATH="${1:?Usage: deploy-executor.sh <project_path> <project_id>}"
 PROJECT_ID="${2:?Usage: deploy-executor.sh <project_path> <project_id>}"
 MASTER_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEMPLATE="$MASTER_ROOT/templates/EXECUTOR.md"
-HOOK_TEMPLATE="$MASTER_ROOT/templates/executor-ctx-monitor.sh"
-
 echo "▶ Déploiement exécutant: $PROJECT_ID → $PROJECT_PATH"
 
 # 1. Créer .claude/ si absent
