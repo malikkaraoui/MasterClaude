@@ -98,10 +98,14 @@ function pollParachuteAlerts() {
 }
 
 // Bus inter-agents poller — dispatche les messages /v1/bus/messages/pending/masterclaude.
+// Backoff exponentiel : 30s → 60s → 120s → 300s (plafond), reset sur succès.
+let _busBackoffMs = 30000;
+let _busBackoffTimer = null;
 async function pollBusMessages() {
   try {
     const res = await parachuteRequest('GET', '/v1/bus/messages/pending/masterclaude');
-    if (res.status !== 200 || !Array.isArray(res.body?.messages)) return;
+    if (res.status !== 200 || !Array.isArray(res.body?.messages)) { _busBackoffMs = 30000; return; }
+    _busBackoffMs = 30000;
     for (const msg of res.body.messages) {
       try {
         await dispatchBusMessage(msg);
@@ -110,7 +114,16 @@ async function pollBusMessages() {
         process.stderr.write(`[bus] dispatch erreur msg=${msg.id}: ${e.message}\n`);
       }
     }
-  } catch {}
+  } catch (e) {
+    _busBackoffMs = Math.min(_busBackoffMs * 2, 300000);
+    process.stderr.write(`[bus] parachute KO, retry dans ${_busBackoffMs / 1000}s: ${e.message}\n`);
+    if (_busBackoffTimer) clearTimeout(_busBackoffTimer);
+    _busBackoffTimer = setTimeout(() => { _busBackoffTimer = null; pollBusMessages(); }, _busBackoffMs);
+    return;
+  }
+}
+function scheduleBusPoll() {
+  if (!_busBackoffTimer) setInterval(pollBusMessages, 30000);
 }
 
 async function dispatchBusMessage(msg) {
@@ -1014,7 +1027,7 @@ process.stdout.write(`[master] démarré PID=${process.pid} vault=${VAULT_PATH}\
 try { _wfs(COMPACT_COUNT_FILE, '0\n'); } catch {}
 ensureTranscribeDaemon();
 setInterval(pollParachuteAlerts, 30000);
-setInterval(pollBusMessages, 30000);
+scheduleBusPoll();
 
 await send('🟢 Master Claude Atelier en ligne\nTape /help pour les commandes.').catch(e => {
   process.stderr.write(`[master] warn: ${e.message}\n`);
