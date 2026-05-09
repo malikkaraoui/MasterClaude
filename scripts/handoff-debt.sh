@@ -115,9 +115,9 @@ except Exception:
     # (pas à chaque candidat → 59 validations → 1 validation)
     if [[ $CONTENT_LEN -gt 100 ]] && [[ "$REVIEWED_RANGE" =~ ^[a-f0-9]{7,40}\.\.[a-f0-9]{7,40}$ ]]; then
       TO_SHA="${REVIEWED_RANGE##*..}"
-      SHA_IN_GIT=$(git -C "$REPO_ROOT" cat-file -e "${TO_SHA}" 2>/dev/null && echo 1 || echo 0)
+      SHA_IN_GIT=$(git -C "$REPO_ROOT" merge-base --is-ancestor "${TO_SHA}" HEAD 2>/dev/null && echo 1 || echo 0)
       LATEST_IN_GIT=0
-      [[ -n "$LATEST_SHA" ]] && LATEST_IN_GIT=$(git -C "$REPO_ROOT" cat-file -e "${LATEST_SHA}" 2>/dev/null && echo 1 || echo 0)
+      [[ -n "$LATEST_SHA" ]] && LATEST_IN_GIT=$(git -C "$REPO_ROOT" merge-base --is-ancestor "${LATEST_SHA}" HEAD 2>/dev/null && echo 1 || echo 0)
       if [[ -z "$LATEST_SHA" ]]; then
         LATEST_INTEGRATED="$f"
         LATEST_SHA="$TO_SHA"
@@ -130,8 +130,10 @@ except Exception:
         # Les deux dans git → comparaison ancêtre classique
         LATEST_INTEGRATED="$f"
         LATEST_SHA="$TO_SHA"
+      elif [[ "$SHA_IN_GIT" == "1" && "$LATEST_IN_GIT" == "1" ]]; then
+        : # Candidat non-descendant dans git → LATEST est déjà plus récent, on garde
       else
-        # Les deux orphelins ou candidat orphelin → comparaison par date de fichier
+        # Orphelin(s) uniquement → comparaison par date de fichier
         CURR_DATE=$(basename "$LATEST_INTEGRATED" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}' || echo "0000-00-00")
         CAND_DATE=$(basename "$f" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}' || echo "0000-00-00")
         if [[ "$CAND_DATE" > "$CURR_DATE" ]] || [[ "$CAND_DATE" == "$CURR_DATE" && "$f" > "$LATEST_INTEGRATED" ]]; then
