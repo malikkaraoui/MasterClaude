@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "subject": "Secrétaire Ollama intégrée dans master.js + SOUL.md/AGENTS.md enrichis + claude-mem v13.0.0",
+    "date": "2026-05-09",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "d24410f..c2ed404"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "Range d24410f..c2ed404 — 5 commits feat/fix couverts :\n- dc1c5e7 feat: intégrer secrétaire Ollama dans master.js — triage messages + réveil Claude via osascript\n- c2ed404 fix: appliquer review Copilot #12 — settled flag + LRU + OLLAMA_PORT + grammaire + commentaire\n- cbd4a15 fix: CLAUDE.md 150 lignes — fusionner ligne claude-mem dans MCPs\n- c988a63 fix: corriger reviewedRange post-rebase (37bac27→f0fb49c)\n- f9de17c fix: appliquer review Copilot #11 — remplir response + integration handoff soul-agents-regle1\n\nLivraison principale : src/master/secretaire.js (153 lignes) + injection dans bin/master.js. La secrétaire est un module ESM pur qui : (1) classe les messages en wake/complex/simple via regex, (2) délègue à ollamaChat() (API REST /api/chat, timeout 30s, settled flag anti-double-resolve), (3) maintient un historique conversationnel par projectKey (Map, MAX_HISTORY=10, LRU eviction MAX_PROJECTS=50), (4) appelle wakeClaudeFunc via osascript pour les triggers wake. 5 points Copilot #12 déjà appliqués : settled flag, LRU cap, validation OLLAMA_PORT, fix grammaire SYSTEM_PROMPT, commentaire non-trompeur. Également : SOUL.md enrichi (Decision Authority + Refus absolus + Tool Safety + protocole recovery RÈGLE 1), claude-mem v13.0.0 installé (port 37701, SQLite + Chroma).",
+    "question": "bin/master.js injecte handleOffline() comme seul fallback quand Claude est hors ligne, mais wakeClaudeSession() utilise osascript + System Events pour trouver une fenêtre Terminal par titre ('MasterClaude'). Deux fragilités : (1) si master.js tourne en LaunchAgent (pas de Terminal visible), osascript échoue silencieusement et handleOffline retourne ❌ Réveil échoué — est-ce que la détection d'échec est suffisamment explicite pour que Malik comprenne la cause racine ? (2) handleOffline() appelle send() deux fois (ligne 107 '⏳ Réveil…' + return valeur) mais sur le chemin non-wake, send() est appelé une seule fois en fin — est-ce que la signature de send() garantit idempotence ou peut-il y avoir un double envoi si Telegram rate-limite ?",
+    "filesToRead": [
+      "src/master/secretaire.js",
+      "bin/master.js",
+      "SOUL.md",
+      "AGENTS.md",
+      "test/ipc.test.js"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
