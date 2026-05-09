@@ -761,6 +761,36 @@ test('vault-loader: fichier illisible (EACCES) retourne ""', () => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// guard-osascript-return.sh
+// Règle §7 : osascript avec keystroke doit inclure keystroke return
+// ─────────────────────────────────────────────────────────────
+console.log('\n── guard-osascript-return.sh ──');
+
+test('bloque osascript avec keystroke sans return', () => {
+  const cmd = `osascript -e 'tell application "System Events" to keystroke "hello"'`;
+  const r = hook('guard-osascript-return.sh', { tool_input: { command: cmd } });
+  ok(r.status === 2, 'exit 2 bloquant');
+  ok(r.stdout.includes('keystroke return'), 'message de blocage présent');
+});
+
+test('laisse passer osascript avec keystroke return', () => {
+  const cmd = `osascript -e 'keystroke "hello"\nkeystroke return'`;
+  const r = hook('guard-osascript-return.sh', { tool_input: { command: cmd } });
+  ok(r.status === 0, 'exit 0 autorisé');
+});
+
+test('silencieux si pas de osascript', () => {
+  const r = hook('guard-osascript-return.sh', { tool_input: { command: 'echo hello' } });
+  ok(r.status === 0, 'exit 0');
+});
+
+test('silencieux si osascript sans keystroke', () => {
+  const cmd = `osascript -e 'tell application "Terminal" to activate'`;
+  const r = hook('guard-osascript-return.sh', { tool_input: { command: cmd } });
+  ok(r.status === 0, 'exit 0');
+});
+
+// ─────────────────────────────────────────────────────────────
 // ollama-proxy — tests Go (go test)
 // ─────────────────────────────────────────────────────────────
 console.log('\n── ollama-proxy (Go) ──');

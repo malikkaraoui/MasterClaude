@@ -410,6 +410,26 @@
       "sha256": "442ff58d66845de7"
     },
     {
+      "name": "guard-osascript-return",
+      "file": "hooks/guard-osascript-return.sh",
+      "type": "PreToolUse",
+      "trigger": "Bash tool with osascript + keystroke",
+      "purpose": "Bloque tout appel osascript avec keystroke mais sans keystroke return — garantit qu'aucune frappe ne reste en attente",
+      "inputs": [
+        "HOOK_COMMAND"
+      ],
+      "outputs": [
+        "allow (exit 0) | block (exit 2 + message)"
+      ],
+      "rule": "§7 Qualité — osascript doit toujours soumettre la frappe",
+      "test": "test/hooks.js → guard-osascript-return.sh (4 tests)",
+      "exitCodes": {
+        "0": "allow",
+        "2": "block — keystroke sans return détecté"
+      },
+      "sha256": "4f1dcd574b732ff7"
+    },
+    {
       "name": "session-handoff-restore",
       "file": "hooks/session-handoff-restore.sh",
       "type": "SessionStart",
@@ -432,13 +452,13 @@
     }
   ],
   "stats": {
-    "total": 21,
+    "total": 22,
     "byType": {
       "helper": 1,
       "SessionStart": 5,
       "Stop": 2,
       "UserPromptSubmit": 4,
-      "PreToolUse": 3,
+      "PreToolUse": 4,
       "PostToolUse": 4,
       "PreToolUse + PostToolUse": 1
     },
