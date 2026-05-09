@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "subject": "Posture cadre §16b + header sémantique 🦙☎️ + template EXECUTOR hiérarchie agents",
+    "date": "2026-05-09",
+    "type": "review",
+    "priority": "moyenne",
+    "reviewedRange": "391295c2f461377ec63ebfbf2fe0e909dc093beb..52ea30144c1552d5ea1cfe5ac6ccc78b9078a529"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "6 commits couvrant 4 axes : (1) fix LaunchAgent ollama-proxy manquant + invariant 3-services DIAGNOSTICS [718c440] ; (2) feat spawn session via .command file + /spawn /sessions /kill Telegram + zombie fix + flags parachute .env [2fbeba6] ; (3) fix appliquer review Copilot #14 — réponse all-windows + corr doublon filesToRead [9db2c5d] ; (4) feat posture cadre §16b + header sémantique 🦙☎️/mode A-M + template EXECUTOR exécutants + deploy script Tier1 [fd96c8a] ; (5) fix sync manifest hooks routing-check + model-metrics [e69ff3f] ; (6) fix shellcheck SC2034 HOOK_TEMPLATE inutilisée [52ea301]. Net : 14 fichiers, +1015/-46 lignes. Points clés : hooks/model-metrics.sh refactorisé (source unique §1 ENTÊTE), routing-check.sh allégé (suppression bloc §1 concurrent), CLAUDE.md §16b ajouté (posture cadre), templates/EXECUTOR.md créé (template hiérarchie sous-agents), scripts/deploy-executor.sh créé (déploiement batch Tier1).",
+    "question": "Le template EXECUTOR.md est déployé via un script bash (deploy-executor.sh) qui appelle `jq` pour merger settings.json et `sed` pour patcher CLAUDE.md via append. Est-ce que cette approche est robuste pour des projets qui ont déjà un settings.json complexe ou un CLAUDE.md structuré (ex: Co-Pilot qui utilise claude-atelier) ? Y a-t-il un risque de corruption ou de doublon si le script est relancé deux fois ?",
+    "filesToRead": [
+      "scripts/deploy-executor.sh",
+      "templates/EXECUTOR.md",
+      ".claude/CLAUDE.md",
+      "hooks/model-metrics.sh",
+      "hooks/routing-check.sh",
+      "bin/master.js"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
