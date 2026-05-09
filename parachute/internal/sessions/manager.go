@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +29,7 @@ type SessionState struct {
 	ProjectKey    string
 	Cwd           string
 	Pid           int
+	WindowID      int // ID fenêtre Terminal — pour fermeture au kill
 	StartedAt     time.Time
 	LastHeartbeat time.Time
 	VaultHash     string // hash du contexte vault injecté au spawn
@@ -73,7 +76,7 @@ func (m *Manager) Spawn(projectKey, cwd string) error {
 		vaultHash = ""
 	}
 
-	pid, err := spawnClaude(cwd, systemPrompt)
+	pid, windowID, err := spawnClaude(cwd, systemPrompt)
 	if err != nil {
 		return fmt.Errorf("spawn claude [%s]: %w", projectKey, err)
 	}
@@ -82,12 +85,13 @@ func (m *Manager) Spawn(projectKey, cwd string) error {
 		ProjectKey:    projectKey,
 		Cwd:           cwd,
 		Pid:           pid,
+		WindowID:      windowID,
 		StartedAt:     time.Now().UTC(),
 		LastHeartbeat: time.Now().UTC(),
 		VaultHash:     vaultHash,
 	}
 
-	m.log.Info("session spawned", "project", projectKey, "pid", pid, "vault_hash", vaultHash)
+	m.log.Info("session spawned", "project", projectKey, "pid", pid, "window_id", windowID, "vault_hash", vaultHash)
 	return nil
 }
 
@@ -108,8 +112,13 @@ func (m *Manager) Kill(projectKey string) error {
 	if err == nil {
 		_ = proc.Signal(os.Interrupt)
 	}
+	// Fermer la fenêtre Terminal par son ID
+	if state.WindowID > 0 {
+		script := fmt.Sprintf(`tell application "Terminal" to close (windows whose id is %d)`, state.WindowID)
+		_ = exec.Command("osascript", "-e", script).Run()
+	}
 	delete(m.sessions, projectKey)
-	m.log.Info("session killed", "project", projectKey, "pid", state.Pid)
+	m.log.Info("session killed", "project", projectKey, "pid", state.Pid, "window_id", state.WindowID)
 	return nil
 }
 
@@ -173,31 +182,63 @@ func (m *Manager) buildSystemPrompt(projectKey string) (string, string, error) {
 	return assembled, vctx.Hash, nil
 }
 
-// spawnClaude lance claude CLI dans cwd via osascript (Terminal macOS).
-// Retourne le PID du processus osascript — NB : ce PID sera mort quelques
-// secondes après le spawn (osascript exit). Il identifie l'opération de
-// spawn, pas le processus Claude lui-même. Kill envoie SIGINT best-effort.
-func spawnClaude(cwd, systemPrompt string) (int, error) {
+// spawnClaude lance claude CLI dans cwd via un fichier .command ouvert par Terminal.app.
+// Un fichier .command ouvert par Terminal.app s'exécute TOUJOURS dans une nouvelle fenêtre.
+// Le script capture son windowId Terminal, le persiste dans un fichier temp, et ferme
+// automatiquement la fenêtre quand claude quitte.
+// Retourne (PID de `open`, windowID Terminal, error).
+func spawnClaude(cwd, systemPrompt string) (int, int, error) {
 	claudePath, err := exec.LookPath("claude")
 	if err != nil {
 		claudePath = filepath.Join(os.Getenv("HOME"), ".claude", "local", "claude")
 	}
 
-	args := []string{claudePath}
+	claudeCmd := claudePath
 	if systemPrompt != "" {
-		args = append(args, "--append-system-prompt", systemPrompt)
+		promptFile := filepath.Join(os.TempDir(), fmt.Sprintf("mc-prompt-%d.txt", time.Now().UnixNano()))
+		if e := os.WriteFile(promptFile, []byte(systemPrompt), 0600); e == nil {
+			claudeCmd = claudePath + ` --append-system-prompt "$(cat ` + promptFile + `)"`
+		}
 	}
 
-	script := fmt.Sprintf(
-		`tell application "Terminal" to do script "cd %q && %s"`,
-		cwd, shellJoin(args),
-	)
+	home := os.Getenv("HOME")
+	ts := time.Now().UnixNano()
+	cmdFile := filepath.Join(os.TempDir(), fmt.Sprintf("mc-spawn-%d.command", ts))
+	winIDFile := filepath.Join(os.TempDir(), fmt.Sprintf("mc-winid-%d.txt", ts))
 
-	cmd := exec.Command("osascript", "-e", script)
+	// Le script capture le windowId de sa propre fenêtre dès l'ouverture,
+	// lance claude (sans exec pour permettre le cleanup), puis ferme la fenêtre.
+	script := fmt.Sprintf(`#!/bin/zsh
+export NVM_DIR=%q
+[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+cd %q
+_WIN_ID=$(osascript -e 'tell application "Terminal" to id of front window' 2>/dev/null)
+echo "$_WIN_ID" > %q
+%s
+[ -n "$_WIN_ID" ] && osascript -e "tell application \"Terminal\" to close (windows whose id is $_WIN_ID)"
+`,
+		filepath.Join(home, ".nvm"), cwd, winIDFile, claudeCmd)
+
+	if e := os.WriteFile(cmdFile, []byte(script), 0755); e != nil {
+		return 0, 0, fmt.Errorf("write .command: %w", e)
+	}
+
+	cmd := exec.Command("open", "-a", "Terminal", cmdFile)
 	if err := cmd.Start(); err != nil {
-		return 0, fmt.Errorf("osascript: %w", err)
+		return 0, 0, fmt.Errorf("open Terminal: %w", err)
 	}
-	return cmd.Process.Pid, nil
+	pid := cmd.Process.Pid
+	go func() { _ = cmd.Wait() }() // évite zombie
+
+	// Attendre que Terminal ouvre la fenêtre et que le script écrive le windowId
+	time.Sleep(800 * time.Millisecond)
+	windowID := 0
+	if raw, e := os.ReadFile(winIDFile); e == nil {
+		windowID, _ = strconv.Atoi(strings.TrimSpace(string(raw)))
+	}
+	_ = os.Remove(winIDFile)
+
+	return pid, windowID, nil
 }
 
 // shellJoin joint les args en une commande shell basique (sans quoting complet).
