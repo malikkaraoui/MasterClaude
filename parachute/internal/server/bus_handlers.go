@@ -16,7 +16,7 @@ func (s *Server) handleBusPost(w http.ResponseWriter, r *http.Request) {
 		Type    string         `json:"type"`
 		Payload map[string]any `json:"payload"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "body JSON invalide: "+err.Error())
 		return
 	}
@@ -67,7 +67,7 @@ func (s *Server) handleBusPutAgentConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var cfg bus.AgentConfig
-	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&cfg); err != nil {
 		writeError(w, http.StatusBadRequest, "body JSON invalide: "+err.Error())
 		return
 	}

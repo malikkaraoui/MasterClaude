@@ -70,14 +70,15 @@ func (b *Bus) Post(from, to, msgType string, payload map[string]any) (*Message, 
 	return m, nil
 }
 
-// Pending retourne les messages non-acquittés destinés à agentId.
+// Pending retourne des copies des messages non-acquittés destinés à agentId.
 func (b *Bus) Pending(agentID string) []*Message {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	var out []*Message
 	for _, m := range b.messages {
 		if m.To == agentID && m.AckedAt == nil {
-			out = append(out, m)
+			cp := *m
+			out = append(out, &cp)
 		}
 	}
 	return out
@@ -112,7 +113,7 @@ func (b *Bus) PutAgentConfig(cfg *AgentConfig) error {
 	return nil
 }
 
-// GetAgentConfig retourne la config d'un agent.
+// GetAgentConfig retourne une copie de la config d'un agent.
 func (b *Bus) GetAgentConfig(agentID string) (*AgentConfig, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -120,35 +121,44 @@ func (b *Bus) GetAgentConfig(agentID string) (*AgentConfig, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	return c, nil
+	cp := *c
+	return &cp, nil
 }
 
-// ListAgentConfigs retourne toutes les configs enregistrées.
+// ListAgentConfigs retourne des copies de toutes les configs enregistrées.
 func (b *Bus) ListAgentConfigs() []*AgentConfig {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	out := make([]*AgentConfig, 0, len(b.configs))
 	for _, c := range b.configs {
-		out = append(out, c)
+		cp := *c
+		out = append(out, &cp)
 	}
 	return out
 }
 
 // gc supprime les messages acquittés les plus anciens pour rester sous 500.
-// Appelé sous b.mu.Lock().
+// Ne supprime jamais les messages non-acquittés (pending). Appelé sous b.mu.Lock().
 func (b *Bus) gc() {
-	var kept []*Message
-	// Retirer d'abord les acquittés vieux de plus de 1h
+	var pending, acked []*Message
 	cutoff := time.Now().Add(-1 * time.Hour)
 	for _, m := range b.messages {
-		if m.AckedAt != nil && m.AckedAt.Before(cutoff) {
-			continue
+		if m.AckedAt == nil {
+			pending = append(pending, m)
+		} else if !m.AckedAt.Before(cutoff) {
+			acked = append(acked, m)
 		}
-		kept = append(kept, m)
+		// acquittés vieux de plus de 1h → supprimés
 	}
-	// Si toujours > 400, tronquer les plus anciens
-	if len(kept) > 400 {
-		kept = kept[len(kept)-400:]
+	// Si acquittés récents + pending > 400, tronquer les acquittés les plus vieux
+	total := len(pending) + len(acked)
+	if total > 400 && len(acked) > 0 {
+		drop := total - 400
+		if drop >= len(acked) {
+			acked = nil
+		} else {
+			acked = acked[drop:]
+		}
 	}
-	b.messages = kept
+	b.messages = append(pending, acked...)
 }
