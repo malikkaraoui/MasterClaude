@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "subject": "Parachute v2 message bus + executor template + routing-check triage fix",
+    "date": "2026-05-09",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "391295c2f461377ec63ebfbf2fe0e909dc093beb..c392bd18dbf9e6a7a3e18037a0281999e5a7b0a4"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "12 commits feat/fix/docs depuis le dernier handoff intégré (391295c). Travaux couverts : (1) feat: spawn session claude via .command file + /spawn /sessions /kill Telegram + zombie fix + flags parachute .env — bin/master.js 1158 lignes, parachute/internal/sessions/manager.go; (2) feat: posture cadre §16b + header sémantique + template EXECUTOR exécutants + deploy script Tier1 — templates/EXECUTOR.md + scripts/deploy-executor.sh; (3) fix: routing-check SWITCH_MODE M quand triage=true — hooks/routing-check.sh lignes 225-235, triage-aware via config.json; (4) fix: LaunchAgent ollama-proxy manquant — scripts/launchagents/com.masterclaude.ollama-proxy.plist; (5) docs: seeding vault — vault/BOOTSTRAP-SESSION.md + ARCHITECTURE-SNAPSHOT.md + DIAGNOSTICS.md; (6) fix: review Copilot #15 — TTL 3600s, hook compact unifié, CLAUDE.md ≤150 lignes. Stats: 15 fichiers, +1059/-57 lignes.",
+    "question": "Le script deploy-executor.sh injecte la config EXECUTOR via osascript — est-ce qu'il valide que le projet cible existe bien (path + .claude/ présent) avant de copier, et gère-t-il correctement les erreurs de permission/path manquant sans silencer les échecs ?",
+    "filesToRead": [
+      "scripts/deploy-executor.sh",
+      "templates/EXECUTOR.md",
+      "hooks/routing-check.sh",
+      "parachute/internal/sessions/manager.go",
+      "bin/master.js"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
