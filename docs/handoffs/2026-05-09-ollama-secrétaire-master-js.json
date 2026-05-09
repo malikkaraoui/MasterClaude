@@ -25,9 +25,11 @@
     ]
   },
   "response": {
-    "model": null,
-    "content": null,
-    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+    "model": "github-copilot-pr-reviewer",
+    "content": "src/master/secretaire.js (ligne 145) : double-envoi Telegram confirmé — handleOffline() appelle `send(fullReply)` puis retourne `fullReply`, et bin/master.js (ligne 1080) envoie à nouveau `reply` via `send(reply)`. Le message arrive deux fois à l'utilisateur sur le chemin simple/complex. Fix : supprimer l'appel `send()` dans handleOffline(), laisser master.js unique point d'envoi. // bin/master.js (ligne 580) : message d'échec osascript non diagnostiquable — '❌ Réveil échoué — autorise Terminal.app dans Réglages → Confidentialité → Automation' est affiché dans tous les cas d'échec, y compris quand la cause est l'absence de session GUI (LaunchAgent headless), ce qui induit Malik en erreur. Fix : inclure `r.stderr` tronqué dans le message pour distinguer 'not allowed' (Automation refusée) vs absence de GUI vs autre erreur osascript. // src/master/secretaire.js (handleOffline wake path) : wakeClaudeFunc() envoie déjà ses propres messages Telegram (🚀, ❌, ⚠️ via send), mais handleOffline retournait précédemment la valeur de ces messages, créant un double-envoi sur le chemin wake aussi. Le chemin wake doit retourner '' pour court-circuiter l'envoi dans routeToClaude."
   },
-  "integration": null
+  "integration": {
+    "retained_implement": "3 points Copilot appliqués : (1) double-envoi non-wake corrigé — suppression de `await send(fullReply).catch(() => {})` dans handleOffline(), master.js reste le seul point d'envoi Telegram ; (2) diagnostic osascript amélioré dans bin/master.js — `r.stderr` extrait (120 chars max) détecte 'not allowed'/'autorisation' → message Automation, sinon affiche le stderr brut ou 'pas de session GUI' ; (3) chemin wake déjà corrigé (session précédente) — handleOffline retourne '' pour les triggers wake, wakeClaudeSession() gère ses propres messages.",
+    "verdict": "3/3 points intégrés. Double-envoi éliminé sur les deux chemins (wake + simple/complex). Diagnostic osascript enrichi permet à Malik de distinguer cause Automation vs headless. secretaire.js respecte désormais le principe single-responsibility : logique uniquement, envoi délégué à master.js."
+  }
 }
