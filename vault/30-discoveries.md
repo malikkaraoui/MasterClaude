@@ -104,7 +104,7 @@ Ce que Claude ou Peter apprend sur le projet et qui mérite de survivre à la se
 - Inbox long-polling : Telegram API → messages dans `/tmp/tg-inbox.jsonl` (JSONL, 1 msg/ligne)
 - Monitor tool tail-f contrôlé (guard-monitor-bridge.sh détecte mort et relance avant réponse)
 - Réponses écrites par Claude dans `/tmp/tg-responses/<chatId>.jsonl` → master lit et envoie en Telegram
-- Session signal `/tmp/masterclaude-real-claude-active` : format `ts:shellPID:parentPID`, TTL 600s (pid vivant = session existe)
+- Session signal `/tmp/masterclaude-real-claude-active` : format `ts:shellPID:parentPID`, TTL 3600s (pid vivant = session existe)
 
 **Fonctionnalités E1 livrées** :
 - Auto-wake : 1er message → osascript Terminal.app + `cd cwd && claude` avec context vault-global injecté
