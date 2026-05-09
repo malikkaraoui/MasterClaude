@@ -97,6 +97,54 @@ function pollParachuteAlerts() {
   } catch {}
 }
 
+// Bus inter-agents poller — dispatche les messages /v1/bus/messages/pending/masterclaude.
+async function pollBusMessages() {
+  try {
+    const res = await parachuteRequest('GET', '/v1/bus/messages/pending/masterclaude');
+    if (res.status !== 200 || !Array.isArray(res.body?.messages)) return;
+    for (const msg of res.body.messages) {
+      try {
+        await dispatchBusMessage(msg);
+        await parachuteRequest('POST', `/v1/bus/messages/${msg.id}/ack`, {});
+      } catch (e) {
+        process.stderr.write(`[bus] dispatch erreur msg=${msg.id}: ${e.message}\n`);
+      }
+    }
+  } catch {}
+}
+
+async function dispatchBusMessage(msg) {
+  const { from, type, payload } = msg;
+  switch (type) {
+    case 'task_done': {
+      const summary = payload?.summary ?? '(pas de résumé)';
+      const files = Array.isArray(payload?.files_changed) ? payload.files_changed.join(', ') : '';
+      await send(`✅ [${from}] Tâche terminée\n${summary}${files ? `\nFichiers: ${files}` : ''}`);
+      break;
+    }
+    case 'heartbeat':
+      process.stdout.write(`[bus] heartbeat from=${from} ctx=${payload?.ctx_pct ?? '?'}% task=${payload?.task_current ?? '-'}\n`);
+      break;
+    case 'compact_req': {
+      const ctx = payload?.ctx_pct ?? 0;
+      await send(`⚡ [${from}] Contexte ${ctx}% — /compact demandé`);
+      // Injecter compact_inject en retour pour que l'executor sache agir
+      await parachuteRequest('POST', '/v1/bus/messages', { from: 'masterclaude', to: from, type: 'compact_inject', payload: { ctx_pct: ctx } });
+      break;
+    }
+    case 'compact_done':
+      process.stdout.write(`[bus] compact_done from=${from} count=${payload?.count ?? '?'}\n`);
+      break;
+    case 'restart_notify': {
+      await send(`🔄 [${from}] 3 compacts atteints — envoi restart_order`);
+      await parachuteRequest('POST', '/v1/bus/messages', { from: 'masterclaude', to: from, type: 'restart_order', payload: {} });
+      break;
+    }
+    default:
+      process.stdout.write(`[bus] message inconnu type=${type} from=${from}\n`);
+  }
+}
+
 import { SessionManager } from '../src/master/session-manager.js';
 import { MemoryStore } from '../src/master/memory-store.js';
 
@@ -966,6 +1014,7 @@ process.stdout.write(`[master] démarré PID=${process.pid} vault=${VAULT_PATH}\
 try { _wfs(COMPACT_COUNT_FILE, '0\n'); } catch {}
 ensureTranscribeDaemon();
 setInterval(pollParachuteAlerts, 30000);
+setInterval(pollBusMessages, 30000);
 
 await send('🟢 Master Claude Atelier en ligne\nTape /help pour les commandes.').catch(e => {
   process.stderr.write(`[master] warn: ${e.message}\n`);
