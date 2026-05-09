@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.masterclaude.ollama-proxy</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/malik/MasterClaude/scripts/ollama-proxy/ollama-proxy</string>
+    <string>-config</string>
+    <string>/Users/malik/MasterClaude/scripts/ollama-proxy/config.json</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/malik/MasterClaude/scripts/ollama-proxy</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/malik/Library/Logs/masterclaude/ollama-proxy.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/malik/Library/Logs/masterclaude/ollama-proxy-error.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OLLAMA_HOST</key>
+    <string>http://localhost:11434</string>
+  </dict>
+</dict>
+</plist>
