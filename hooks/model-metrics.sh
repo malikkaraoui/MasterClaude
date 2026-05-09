@@ -228,14 +228,15 @@ python3 -c "import json,sys,os; d=json.load(open(sys.argv[1])) if os.path.exists
 # Pastille : extraire depuis METRICS si disponible, 🟢 par défaut (session courte / compactée)
 _PASTILLE=$(printf '%s' "$METRICS" | grep -oE '(⬆️|⬇️|🟢)' | tail -1)
 [ -z "$_PASTILLE" ] && _PASTILLE="🟢"
-# Mode proxy : A si proxy actif, M sinon
+# Mode : A = Ollama intercepte tout (triage=false), M = Claude répond directement (triage=true ou proxy absent)
 # Validation stricte JSON {"status":"ok"} — évite les faux positifs (Vite, autres serveurs sur :4000)
 _PROXY_HEALTH=$(curl -s --max-time 1 http://localhost:4000/health 2>/dev/null)
 _PROXY_OK=$(echo "$_PROXY_HEALTH" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if d.get('status')=='ok' and d.get('proxy')=='ollama' else '')" 2>/dev/null)
+_MMODE="M"
 if [ -n "$_PROXY_OK" ]; then
-  _MMODE="A"
-else
-  _MMODE="M"
+  _PROXY_CFG_TRIAGE="$(cd "$(dirname "$0")/.." && pwd)/scripts/ollama-proxy/config.json"
+  _TRIAGE_VAL=$(python3 -c "import json,os; d=json.load(open('$_PROXY_CFG_TRIAGE')) if os.path.exists('$_PROXY_CFG_TRIAGE') else {}; print(str(d.get('triage',True)).lower())" 2>/dev/null)
+  [ "$_TRIAGE_VAL" = "false" ] && _MMODE="A"
 fi
 # Détection Ollama inline (hooks parallèles — pas de dépendance fichier routing-check.sh)
 _MOLLAMA=""
@@ -263,8 +264,8 @@ except: print('false')
       _MOLLAMA="🦙✅${_OLLAMA_LLM:+ $_OLLAMA_LLM}"
       _PASTILLE="❌"
     else
-      # triage=true : routage dynamique, Anthropic peut répondre → conserver pastille METRICS
-      _MOLLAMA="🦙⚡${_OLLAMA_LLM:+ $_OLLAMA_LLM}"
+      # triage=true : Claude répond, Ollama = répondeur par défaut (secrétariat en standby)
+      _MOLLAMA="🦙☎️${_OLLAMA_LLM:+ $_OLLAMA_LLM}"
     fi
   elif curl -s --max-time 1 http://localhost:11434/api/tags &>/dev/null; then
     _MOLLAMA="🦙❌"
