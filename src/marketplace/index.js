@@ -1,82 +1,35 @@
-// src/marketplace/index.js — Marketplace inter-agents : polling + auto-bid + spawn session
-//
-// Flux : open/ → (skill match + idle) → taken/ → spawn Claude → done/ + ledger
-// Transport : GitHub API via `gh` CLI (pas de clone local)
-// Activation : MARKETPLACE_ENABLED=1 dans l'env du daemon
+// src/marketplace/index.js — Marketplace inter-agents v2
+// Anti-abus · Réputation · Escrow · Rating · Timeout · Ban automatique
 
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 
+// ── Config env ───────────────────────────────────────────────────────────────
 export const REPO       = process.env.MARKETPLACE_REPO     || 'malikkaraoui/atelier-marketplace';
 export const AGENT_ID   = process.env.MARKETPLACE_AGENT_ID || 'masterclaude@malik';
 export const POLL_SEC   = parseInt(process.env.MARKETPLACE_POLL_SEC   || '300', 10);
 export const MIN_BUDGET = parseInt(process.env.MARKETPLACE_MIN_BUDGET || '10',  10);
 export const MAX_HOURS  = parseInt(process.env.MARKETPLACE_MAX_HOURS  || '24',  10);
 
-// Cache pour éviter de re-bidder un fichier déjà pris dans la même session
-const _taken = new Set();
+// ── Constantes système ───────────────────────────────────────────────────────
+const STAKE_PCT       = 0.10;  // Caution : 10% du budget bloqués à la prise
+const BAN_THRESHOLD   = 15;    // Score ≤ 15 → banni définitivement
+const SCORE_INIT      = 50;    // Score de départ tout nouvel agent
+const SCORE_MAX       = 100;
+const COOLDOWN_H      = 2;     // Cooldown après mauvaise note ou échec
+const MAX_CLAIMS_H    = 5;     // Anti-spam : max 5 claims/heure/agent
+const TIMEOUT_H       = 24;    // Expiration auto si taken non livré
+const SCORE_DONE_BASE = +3;    // Bonus juste pour avoir livré
+const SCORE_TIMEOUT   = -15;   // Pénalité timeout
+// Index = nb d'étoiles (1-5)
+const SCORE_RATING    = [0, -25, -10, 0, +5, +10];
+const COOLDOWN_RATING = [0, true, true, false, false, false]; // cooldown si 1 ou 2★
 
-// ─── Ledger (offre/demande) ─────────────────────────────────────────────────
+// ── Cache session ────────────────────────────────────────────────────────────
+const _claimedThisSession = new Set();
+const _rateWindowMap      = new Map(); // agentId → timestamps[] pour rate-limiting
 
-function getLedger(agentId) {
-  const data = ghApi(`ledger/${agentId}.json`);
-  if (!data?.content) return { balance: 0, history: [], sha: null };
-  try {
-    const parsed = JSON.parse(Buffer.from(data.content, 'base64').toString());
-    return { ...parsed, sha: data.sha };
-  } catch { return { balance: 0, history: [], sha: null }; }
-}
-
-function updateBalance(agentId, delta, reason) {
-  const ledger = getLedger(agentId);
-  const newBalance = (ledger.balance || 0) + delta;
-  if (newBalance < 0) {
-    process.stdout.write(`[marketplace] solde insuffisant pour ${agentId} (${ledger.balance} < ${-delta})\n`);
-    return false;
-  }
-  const entry = { ts: new Date().toISOString(), delta, reason, balance: newBalance };
-  const updated = {
-    agent_id: agentId,
-    balance: newBalance,
-    updated_at: entry.ts,
-    history: [...(ledger.history || []).slice(-49), entry],
-  };
-  const encoded = Buffer.from(JSON.stringify(updated, null, 2)).toString('base64');
-  const fields = {
-    message: `ledger: ${delta >= 0 ? '+' : ''}${delta} crédits (${reason}) → ${newBalance}`,
-    content: encoded,
-  };
-  if (ledger.sha) fields.sha = ledger.sha;
-  const r = ghApi(`ledger/${agentId}.json`, { method: 'PUT', fields });
-  if (!r) {
-    process.stdout.write(`[marketplace] échec mise à jour ledger ${agentId}\n`);
-    return false;
-  }
-  process.stdout.write(`[marketplace] ledger ${agentId} : ${delta >= 0 ? '+' : ''}${delta} (${reason}) → ${newBalance}\n`);
-  return true;
-}
-
-export function getBalance(agentId = AGENT_ID) {
-  const ledger = getLedger(agentId);
-  return ledger.balance ?? 0;
-}
-
-export function initLedger(agentId = AGENT_ID, initialBalance = 1000) {
-  const existing = ghApi(`ledger/${agentId}.json`);
-  if (existing?.content) return false; // déjà initialisé
-  const data = {
-    agent_id: agentId,
-    balance: initialBalance,
-    updated_at: new Date().toISOString(),
-    history: [{ ts: new Date().toISOString(), delta: initialBalance, reason: 'init', balance: initialBalance }],
-  };
-  const encoded = Buffer.from(JSON.stringify(data, null, 2)).toString('base64');
-  ghApi(`ledger/${agentId}.json`, {
-    method: 'PUT',
-    fields: { message: `ledger: init ${agentId} (${initialBalance} crédits)`, content: encoded },
-  });
-  return true;
-}
-
+// ── Transport GitHub ─────────────────────────────────────────────────────────
 function ghApi(path, opts = {}) {
   const args = ['api', `repos/${REPO}/contents/${path}`];
   if (opts.method) args.push('-X', opts.method);
@@ -86,178 +39,368 @@ function ghApi(path, opts = {}) {
   try { return JSON.parse(r.stdout); } catch { return null; }
 }
 
-function fetchAgentSkills() {
-  const data = ghApi('skills/registry.json');
-  if (!data?.content) return [];
+function ghRead(path) {
+  const raw = ghApi(path);
+  if (!raw?.content) return null;
   try {
-    const registry = JSON.parse(Buffer.from(data.content, 'base64').toString());
-    const agent = registry.agents?.[AGENT_ID];
+    return { data: JSON.parse(Buffer.from(raw.content, 'base64').toString()), sha: raw.sha };
+  } catch { return null; }
+}
+
+function ghWrite(path, data, sha, message) {
+  const encoded = Buffer.from(JSON.stringify(data, null, 2)).toString('base64');
+  const fields = { message, content: encoded };
+  if (sha) fields.sha = sha;
+  return ghApi(path, { method: 'PUT', fields }) !== null;
+}
+
+function ghDelete(path, sha, message) {
+  return ghApi(path, { method: 'DELETE', fields: { message, sha } }) !== null;
+}
+
+// ── IDs uniques ───────────────────────────────────────────────────────────────
+export function generateTaskId() {
+  return `task-${Date.now()}-${randomBytes(3).toString('hex')}`;
+}
+
+// ── Ledger (crédits) ──────────────────────────────────────────────────────────
+function _readLedger(agentId) {
+  const r = ghRead(`ledger/${agentId}.json`);
+  if (!r) return { agent_id: agentId, balance: 0, history: [], sha: null };
+  return { ...r.data, sha: r.sha };
+}
+
+function _writeLedger(agentId, delta, reason) {
+  const ledger = _readLedger(agentId);
+  const newBalance = (ledger.balance || 0) + delta;
+  if (newBalance < 0) {
+    process.stdout.write(`[ledger] ❌ solde insuffisant ${agentId} (${ledger.balance} < ${-delta})\n`);
+    return false;
+  }
+  const entry = { ts: new Date().toISOString(), delta, reason, balance: newBalance };
+  const updated = {
+    agent_id: agentId,
+    balance: newBalance,
+    updated_at: entry.ts,
+    history: [...(ledger.history || []).slice(-99), entry],
+  };
+  const ok = ghWrite(`ledger/${agentId}.json`, updated, ledger.sha || null,
+    `ledger: ${delta >= 0 ? '+' : ''}${delta} (${reason}) → ${newBalance}`);
+  if (ok) process.stdout.write(`[ledger] ${agentId}: ${delta >= 0 ? '+' : ''}${delta} (${reason}) → ${newBalance} crédits\n`);
+  return ok;
+}
+
+export function getBalance(agentId = AGENT_ID) {
+  return _readLedger(agentId).balance ?? 0;
+}
+
+export function initLedger(agentId = AGENT_ID, initialBalance = 1000) {
+  if (ghApi(`ledger/${agentId}.json`)?.content) return false;
+  const data = {
+    agent_id: agentId,
+    balance: initialBalance,
+    updated_at: new Date().toISOString(),
+    history: [{ ts: new Date().toISOString(), delta: initialBalance, reason: 'init', balance: initialBalance }],
+  };
+  const ok = ghWrite(`ledger/${agentId}.json`, data, null, `ledger: init ${agentId} (${initialBalance} crédits)`);
+  if (ok) process.stdout.write(`[ledger] ✅ ${agentId} initialisé — ${initialBalance} crédits\n`);
+  return ok;
+}
+
+// ── Réputation ────────────────────────────────────────────────────────────────
+function _readRep(agentId) {
+  const r = ghRead(`reputation/${agentId}.json`);
+  if (!r) return {
+    agent_id: agentId, score: SCORE_INIT, banned: false,
+    cooldown_until: null, failures: 0, completions: 0, ratings_avg: null,
+    ratings: [], history: [], sha: null,
+  };
+  return { ...r.data, sha: r.sha };
+}
+
+function _writeRep(agentId, delta, reason, extra = {}) {
+  const rep = _readRep(agentId);
+  const newScore = Math.max(0, Math.min(SCORE_MAX, (rep.score ?? SCORE_INIT) + delta));
+  const banned = newScore <= BAN_THRESHOLD;
+
+  const allRatings = [...(rep.ratings || []), ...(extra.newRating ? [extra.newRating] : [])];
+  const ratingsAvg = allRatings.length
+    ? +(allRatings.reduce((a, r) => a + r.stars, 0) / allRatings.length).toFixed(2)
+    : null;
+
+  const updated = {
+    agent_id: agentId,
+    score: newScore,
+    banned,
+    cooldown_until: extra.cooldown_until ?? rep.cooldown_until ?? null,
+    failures: (rep.failures || 0) + (extra.failure ? 1 : 0),
+    completions: (rep.completions || 0) + (extra.completion ? 1 : 0),
+    ratings_avg: ratingsAvg,
+    ratings: allRatings.slice(-49),
+    updated_at: new Date().toISOString(),
+    history: [...(rep.history || []).slice(-49), { ts: new Date().toISOString(), delta, reason, score: newScore }],
+  };
+
+  ghWrite(`reputation/${agentId}.json`, updated, rep.sha || null,
+    `rep: ${agentId} ${delta >= 0 ? '+' : ''}${delta} (${reason}) → ${newScore}${banned ? ' 🚫BAN' : ''}`);
+
+  if (banned && !rep.banned) {
+    process.stdout.write(`[marketplace] 🚫 BAN : ${agentId} (score=${newScore}, failures=${updated.failures})\n`);
+  }
+  return updated;
+}
+
+export function getReputation(agentId = AGENT_ID) {
+  const r = _readRep(agentId);
+  return { score: r.score, banned: r.banned, cooldown_until: r.cooldown_until,
+           failures: r.failures, completions: r.completions, ratings_avg: r.ratings_avg };
+}
+
+export function isAgentBanned(agentId = AGENT_ID) {
+  return _readRep(agentId).banned === true;
+}
+
+function _isInCooldown(agentId) {
+  const rep = _readRep(agentId);
+  if (!rep.cooldown_until) return false;
+  return new Date(rep.cooldown_until) > new Date();
+}
+
+function _checkRateLimit(agentId) {
+  const now = Date.now();
+  const times = (_rateWindowMap.get(agentId) || []).filter(t => now - t < 3600000);
+  if (times.length >= MAX_CLAIMS_H) return false;
+  _rateWindowMap.set(agentId, [...times, now]);
+  return true;
+}
+
+// ── Publier une tâche ─────────────────────────────────────────────────────────
+export function postTask({ skill, description, budget_credits, deadline_hours = 4, context = '', posted_by = AGENT_ID }) {
+  // Vérif que le poster a les crédits
+  if (getBalance(posted_by) < budget_credits) {
+    process.stdout.write(`[marketplace] ❌ solde insuffisant pour poster (${getBalance(posted_by)} < ${budget_credits})\n`);
+    return null;
+  }
+  const id = generateTaskId();
+  const task = {
+    id,
+    skill,
+    description,
+    budget_credits,
+    deadline: new Date(Date.now() + deadline_hours * 3600000).toISOString(),
+    status: 'open',
+    posted_by,
+    posted_at: new Date().toISOString(),
+    context: context || null,
+    bids: [],
+    _v: 2,
+  };
+  if (!ghWrite(`open/${id}.json`, task, null, `post: ${id} (${skill}, ${budget_credits}cr)`)) return null;
+  _writeLedger(posted_by, -budget_credits, `escrow:${id}`);
+  process.stdout.write(`[marketplace] 📋 tâche publiée : ${id} (${skill}, ${budget_credits} crédits)\n`);
+  return { id, filename: `${id}.json`, task };
+}
+
+// ── Claim ─────────────────────────────────────────────────────────────────────
+function _claim(filename, announcement, sha) {
+  const agentId = AGENT_ID;
+
+  if (isAgentBanned(agentId))    { process.stdout.write(`[marketplace] 🚫 banni — claim refusé\n`); return false; }
+  if (_isInCooldown(agentId))    { process.stdout.write(`[marketplace] ⏳ cooldown actif — skip\n`); return false; }
+  if (!_checkRateLimit(agentId)) { process.stdout.write(`[marketplace] 🚦 rate limit ${MAX_CLAIMS_H}/h atteint\n`); return false; }
+
+  const stake = Math.ceil((announcement.budget_credits || 0) * STAKE_PCT);
+  if (getBalance(agentId) < stake) {
+    process.stdout.write(`[marketplace] ❌ caution insuffisante : ${getBalance(agentId)} < ${stake}\n`);
+    return false;
+  }
+
+  // Optimistic locking : vérifier SHA avant tout
+  const fresh = ghApi(`open/${filename}`);
+  if (!fresh || fresh.sha !== sha) {
+    process.stdout.write(`[marketplace] ⚡ conflit SHA ${filename} — déjà pris par un concurrent\n`);
+    return false;
+  }
+
+  const taken = {
+    ...announcement,
+    status: 'taken',
+    taken_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + TIMEOUT_H * 3600000).toISOString(),
+    winner_id: agentId,
+    stake,
+    bids: [...(announcement.bids || []), { agent_id: agentId, bid_at: new Date().toISOString(), stake, accepted: true }],
+    _v: 2,
+  };
+
+  if (!ghWrite(`taken/${filename}`, taken, null, `claim: ${filename} by ${agentId}`)) return false;
+  _writeLedger(agentId, -stake, `stake:${announcement.id}`);
+  ghDelete(`open/${filename}`, fresh.sha, `open→taken: ${filename}`);
+  return { stake };
+}
+
+// ── Complétion ────────────────────────────────────────────────────────────────
+export function completeAnnouncement(filename, takenContent, _tSha, result) {
+  const existing = ghRead(`taken/${filename}`);
+  const tSha = existing?.sha || _tSha;
+  const agentId = takenContent.winner_id || AGENT_ID;
+  const budget = takenContent.budget_credits || 0;
+  const stake = takenContent.stake || Math.ceil(budget * STAKE_PCT);
+
+  const done = { ...takenContent, status: 'done', done_at: new Date().toISOString(), result: result || '(aucun résultat)', rating: null, _v: 2 };
+  ghWrite(`done/${filename}`, done, null, `done: ${filename} by ${agentId}`);
+  if (tSha) ghDelete(`taken/${filename}`, tSha, `taken→done: ${filename}`);
+
+  // Rembourser caution + créditer budget
+  _writeLedger(agentId, budget + stake, `earned:${takenContent.id}`);
+  // Score de base pour toute livraison
+  _writeRep(agentId, SCORE_DONE_BASE, `delivered:${takenContent.id}`, { completion: true });
+
+  process.stdout.write(`[marketplace] ✅ livraison ${filename} — ${agentId} +${budget + stake} crédits\n`);
+}
+
+// ── Rating (poster note l'exécutant après done/) ──────────────────────────────
+export function rateTask(filename, stars, ratedBy = 'poster') {
+  if (stars < 1 || stars > 5) { process.stdout.write(`[marketplace] ❌ note invalide (1-5 requis)\n`); return false; }
+
+  const r = ghRead(`done/${filename}`);
+  if (!r) { process.stdout.write(`[marketplace] ❌ done/${filename} introuvable\n`); return false; }
+  if (r.data.rating !== null && r.data.rating !== undefined) {
+    process.stdout.write(`[marketplace] ⚠️ tâche déjà notée (${r.data.rating}★)\n`); return false;
+  }
+
+  const agentId = r.data.winner_id;
+  const scoreDelta = SCORE_RATING[stars] ?? 0;
+  const needCooldown = COOLDOWN_RATING[stars] === true;
+  const cooldown_until = needCooldown ? new Date(Date.now() + COOLDOWN_H * 3600000).toISOString() : null;
+
+  ghWrite(`done/${filename}`, { ...r.data, rating: stars, rated_by: ratedBy, rated_at: new Date().toISOString() },
+    r.sha, `rating: ${stars}★ pour ${agentId} sur ${filename}`);
+
+  _writeRep(agentId, scoreDelta, `rated:${stars}stars`, {
+    failure: stars <= 2,
+    newRating: { task: filename, stars, ts: new Date().toISOString() },
+    cooldown_until,
+  });
+
+  const icon = stars >= 4 ? '⭐' : stars === 3 ? '🆗' : '⚠️';
+  process.stdout.write(`[marketplace] ${icon} ${stars}★ pour ${agentId}${needCooldown ? ` → cooldown ${COOLDOWN_H}h` : ''}\n`);
+  return true;
+}
+
+// ── Timeout : scanner taken/ pour tâches expirées ─────────────────────────────
+export function checkTimeouts() {
+  const files = ghApi('taken');
+  if (!Array.isArray(files)) return 0;
+  const now = new Date();
+  let count = 0;
+
+  for (const f of files) {
+    if (!f.name.endsWith('.json') || f.name.startsWith('.')) continue;
+    const r = ghRead(`taken/${f.name}`);
+    if (!r?.data?.expires_at) continue;
+    if (new Date(r.data.expires_at) > now) continue;
+
+    const task = r.data;
+    process.stdout.write(`[marketplace] ⏰ timeout : ${f.name} (winner=${task.winner_id})\n`);
+
+    // Rembourser l'escrow au poster
+    if (task.posted_by) _writeLedger(task.posted_by, task.budget_credits || 0, `refund_timeout:${task.id}`);
+
+    // Brûler la caution de l'exécutant + pénalité réputation + cooldown
+    if (task.winner_id) {
+      const cooldown_until = new Date(Date.now() + COOLDOWN_H * 3600000).toISOString();
+      _writeRep(task.winner_id, SCORE_TIMEOUT, `timeout:${task.id}`, { failure: true, cooldown_until });
+    }
+
+    const cancelled = { ...task, status: 'cancelled', cancelled_at: now.toISOString(), reason: 'timeout', _v: 2 };
+    ghWrite(`done/${f.name}`, cancelled, null, `timeout→cancelled: ${f.name}`);
+    ghDelete(`taken/${f.name}`, r.sha, `timeout: remove taken/${f.name}`);
+    _claimedThisSession.delete(f.name);
+    count++;
+  }
+  return count;
+}
+
+// ── Skills + open/ ────────────────────────────────────────────────────────────
+function _fetchAgentSkills() {
+  const raw = ghApi('skills/registry.json');
+  if (!raw?.content) return [];
+  try {
+    const reg = JSON.parse(Buffer.from(raw.content, 'base64').toString());
+    const agent = reg.agents?.[AGENT_ID];
     if (!agent?.available) return [];
     return agent.skills || [];
   } catch { return []; }
 }
 
-function fetchOpenAnnouncements() {
-  const files = ghApi('open');
-  if (!Array.isArray(files)) return [];
-  return files.filter(f => f.name.endsWith('.json') && !f.name.startsWith('.'));
-}
-
-function fetchFileContent(filePath) {
-  const data = ghApi(filePath);
-  if (!data?.content) return null;
-  try { return { content: JSON.parse(Buffer.from(data.content, 'base64').toString()), sha: data.sha }; }
-  catch { return null; }
-}
-
-function claimAnnouncement(filename, announcement, sha) {
-  // Optimistic locking : vérifier que personne n'a pris la tâche entre le GET et le claim
-  const fresh = ghApi(`open/${filename}`);
-  if (!fresh || fresh.sha !== sha) {
-    process.stdout.write(`[marketplace] conflit SHA ${filename} — déjà pris par un autre agent\n`);
-    return false;
-  }
-
-  const updated = {
-    ...announcement,
-    status: 'taken',
-    taken_at: new Date().toISOString(),
-    bids: [...(announcement.bids || []), {
-      agent_id: AGENT_ID,
-      bid_at: new Date().toISOString(),
-      confidence: 90,
-      accepted: true,
-    }],
-    winner_id: AGENT_ID,
-    assigned_at: new Date().toISOString(),
-  };
-  const encoded = Buffer.from(JSON.stringify(updated, null, 2)).toString('base64');
-
-  const create = ghApi(`taken/${filename}`, {
-    method: 'PUT',
-    fields: {
-      message: `feat: bid task ${filename} (${AGENT_ID})`,
-      content: encoded,
-    },
-  });
-  if (!create) return false;
-
-  // Bloquer les crédits du poster (débit escrow)
-  const poster = announcement.posted_by;
-  if (poster) updateBalance(poster, -(announcement.budget_credits || 0), `escrow:${filename}`);
-
-  // DELETE avec le SHA frais — si 422, un autre agent a déjà supprimé (on ignore)
-  ghApi(`open/${filename}`, {
-    method: 'DELETE',
-    fields: {
-      message: `feat: remove from open — taken by ${AGENT_ID}`,
-      sha: fresh.sha,
-    },
-  });
-  return true;
-}
-
-export function completeAnnouncement(filename, takenContent, _tSha, result) {
-  const done = {
-    ...takenContent,
-    status: 'done',
-    done_at: new Date().toISOString(),
-    result: result || '(aucun résultat)',
-  };
-  const encoded = Buffer.from(JSON.stringify(done, null, 2)).toString('base64');
-
-  const existing = ghApi(`taken/${filename}`);
-  const tSha = existing?.sha || _tSha;
-
-  ghApi(`done/${filename}`, {
-    method: 'PUT',
-    fields: {
-      message: `feat: task done ${filename} (${AGENT_ID})`,
-      content: encoded,
-    },
-  });
-  if (tSha) {
-    ghApi(`taken/${filename}`, {
-      method: 'DELETE',
-      fields: { message: `feat: remove from taken — done`, sha: tSha },
-    });
-  }
-
-  // Créditer l'exécutant
-  const budget = takenContent.budget_credits || 0;
-  if (budget > 0) updateBalance(AGENT_ID, budget, `task_done:${filename}`);
-}
-
-function isMatch(announcement, agentSkills) {
-  const skill = announcement.skill;
-  if (!skill || !agentSkills.includes(skill)) return false;
-  if ((announcement.budget_credits ?? 0) < MIN_BUDGET) return false;
-  if (announcement.deadline) {
-    const hoursLeft = (new Date(announcement.deadline) - Date.now()) / 3600000;
-    if (hoursLeft < 1 || hoursLeft > MAX_HOURS) return false;
+function _isMatch(ann, skills) {
+  if (!ann.skill || !skills.includes(ann.skill)) return false;
+  if ((ann.budget_credits ?? 0) < MIN_BUDGET) return false;
+  if (ann.deadline) {
+    const h = (new Date(ann.deadline) - Date.now()) / 3600000;
+    if (h < 1 || h > MAX_HOURS) return false;
   }
   return true;
 }
 
-// Appelé par master.js quand session idle.
-// readSessionSignal : fonction de master.js passée en paramètre (évite couplage).
+// ── Poll principal ────────────────────────────────────────────────────────────
 export async function poll(readSessionSignal) {
   if (readSessionSignal?.().valid) {
     process.stdout.write('[marketplace] session active — skip poll\n');
     return null;
   }
 
-  const agentSkills = fetchAgentSkills();
-  if (!agentSkills.length) {
-    process.stdout.write('[marketplace] agent indisponible ou skills vides\n');
-    return null;
+  // Timeouts à chaque poll
+  const expired = checkTimeouts();
+  if (expired > 0) process.stdout.write(`[marketplace] ⏰ ${expired} tâche(s) expirée(s)\n`);
+
+  if (isAgentBanned()) { process.stdout.write(`[marketplace] 🚫 agent banni — poll arrêté\n`); return null; }
+  if (_isInCooldown(AGENT_ID)) { process.stdout.write(`[marketplace] ⏳ cooldown actif — skip\n`); return null; }
+
+  const skills = _fetchAgentSkills();
+  if (!skills.length) { process.stdout.write('[marketplace] skills vides ou agent inactif\n'); return null; }
+
+  const openFiles = ghApi('open');
+  if (!Array.isArray(openFiles) || !openFiles.length) {
+    process.stdout.write('[marketplace] aucune annonce\n'); return null;
   }
 
-  const openFiles = fetchOpenAnnouncements();
-  if (!openFiles.length) {
-    process.stdout.write('[marketplace] aucune annonce dans open/\n');
-    return null;
-  }
+  for (const f of openFiles) {
+    if (!f.name.endsWith('.json') || f.name.startsWith('.')) continue;
+    if (_claimedThisSession.has(f.name)) continue;
 
-  for (const file of openFiles) {
-    if (_taken.has(file.name)) continue;
+    const r = ghRead(`open/${f.name}`);
+    if (!r) continue;
+    const { data: ann, sha } = r;
 
-    const fetched = fetchFileContent(`open/${file.name}`);
-    if (!fetched) continue;
-
-    const { content: announcement, sha } = fetched;
-    if (!isMatch(announcement, agentSkills)) {
-      process.stdout.write(`[marketplace] skip ${file.name} skill=${announcement.skill}\n`);
+    if (!_isMatch(ann, skills)) {
+      process.stdout.write(`[marketplace] skip ${f.name} (skill=${ann.skill})\n`);
       continue;
     }
 
-    process.stdout.write(`[marketplace] match: ${file.name} skill=${announcement.skill} budget=${announcement.budget_credits}\n`);
-    if (!claimAnnouncement(file.name, announcement, sha)) {
-      process.stdout.write(`[marketplace] échec claim ${file.name}\n`);
-      continue;
-    }
+    process.stdout.write(`[marketplace] 🎯 match ${f.name} skill=${ann.skill} budget=${ann.budget_credits}\n`);
+    const claimed = _claim(f.name, ann, sha);
+    if (!claimed) continue;
 
-    _taken.add(file.name);
-    process.stdout.write(`[marketplace] tâche prise : ${file.name}\n`);
-    return { claimed: true, filename: file.name, task: announcement };
+    _claimedThisSession.add(f.name);
+    return { claimed: true, filename: f.name, task: ann, stake: claimed.stake };
   }
-
   return null;
 }
 
+// ── Prompt pour session Claude ────────────────────────────────────────────────
 export function buildTaskPrompt(task) {
-  return `## Tâche Marketplace reçue automatiquement
+  return `## Tâche Marketplace — ${task.id}
 
-**ID** : ${task.id || '(inconnu)'}
-**Skill requis** : ${task.skill}
+**Skill** : ${task.skill}
 **Description** : ${task.description}
 **Budget** : ${task.budget_credits} crédits
-**Deadline** : ${task.deadline || 'non définie'}
-${task.context ? `**Contexte additionnel** :\n${task.context}` : ''}
+**Deadline** : ${task.deadline}
+${task.context ? `**Contexte** :\n${task.context}\n` : ''}
+Écris ton résultat dans : /tmp/marketplace-result-${task.id}.txt
+Format : commence par "TÂCHE TERMINÉE" + résumé structuré.
 
-Accomplis cette tâche, puis écris ton résultat dans :
-  /tmp/marketplace-result-${task.id || 'unknown'}.txt
-
-Quand terminé, écris "TÂCHE TERMINÉE" + résumé dans ce fichier.
+⚠️ Ta réputation est en jeu : mauvaise livraison → note basse → cooldown → ban.
 `;
 }
