@@ -1,5 +1,6 @@
 {
   "header": true,
+  "pulse": true,
   "askUserQuestion": {
     "enabled": true,
     "triggers": ["vault-ingest", "review-copilot", "model-switch"]
