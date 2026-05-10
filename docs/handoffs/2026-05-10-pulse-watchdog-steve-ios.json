@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "subject": "pulse-watchdog agent supervisor + fix hooks manifest + sync Steve iOS best practices",
+    "date": "2026-05-10",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "c2defad70315a097d9880ebac412ab71e3395acd..c2b41a2c261986e19160e69e0015472277bde00d"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "4 commits depuis le dernier handoff intégré (pulse-autonomous-session-detection) : (1) feat abec9fd — pulse-watchdog : détection crash agents + alerte Telegram + injection terminal (LaunchAgent macOS, fichiers pulse YAML TTL-based, osascript guard) ; (2) fix 9a60044 — appliquer review Copilot #20 (8 points : erreurs silencieuses, VAULT_PATH configurable, insertion string sans newline, race condition pulse-set-active.js) ; (3) fix b875b95 — ajouter pulse-init et pulse-active au hooks-manifest pour npm test ; (4) feat c2b41a2 — sync bonnes pratiques iOS Steve (dark mode semantic colors, i18n Localizable.strings, SKStoreReviewController, ShareLink, SettingsView template) vers MasterClaude depuis claude-atelier.",
+    "question": "Le pulse-watchdog (abec9fd) démarre un LaunchAgent macOS qui écrit des fichiers YAML dans /tmp et envoie des alertes Telegram — mais si le daemon redémarre après un crash, il risque de relire des fichiers pulse périmés (TTL expiré) et d'envoyer de fausses alertes 'agent KO'. Le nettoyage des pulses périmés est-il atomique et le daemon est-il réellement idempotent au redémarrage ?",
+    "filesToRead": [
+      "src/hooks/pulse-watchdog.js",
+      "src/hooks/pulse-set-active.js",
+      "src/hooks/pulse-init.js",
+      "com.masterclaude.pulse-watchdog.plist",
+      ".claude/hooks-manifest.json",
+      "src/stacks/ios-xcode.md"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
