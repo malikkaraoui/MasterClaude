@@ -61,6 +61,7 @@ writePoulsMd(outPath, {
   phase: phase || '—',
   intensity: { current: intensity, ceiling: profile.ceiling },
   lang: 'fr',
+  cwd: process.env.CLAUDE_PROJECT_DIR || ROOT,
 }, '## État courant\n\nInitialisé via SessionStart hook.\n');
 
 process.stdout.write(`[PULSE-INIT] pouls.md créé : ${outPath}\n`);
