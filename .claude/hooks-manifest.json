@@ -430,6 +430,46 @@
       "sha256": "4f1dcd574b732ff7"
     },
     {
+      "name": "pulse-init",
+      "file": "hooks/pulse-init.sh",
+      "type": "SessionStart",
+      "trigger": "session.start",
+      "purpose": "Crée pouls.md pour l'agent courant si absent — initialise le fichier de pouls avec statut, TTL et cwd via pulse-ensure-init.js",
+      "inputs": [
+        "CLAUDE_PROJECT_DIR (env)",
+        "hostname (os)"
+      ],
+      "outputs": [
+        "writes .claude/agents/<agentId>/pouls.md"
+      ],
+      "rule": "§0 Pulse system — auto-init sans dépendance manuelle",
+      "test": null,
+      "exitCodes": {
+        "0": "always (silent, errors logged to /tmp/masterclaude-pulse.log)"
+      },
+      "sha256": "5f55cc556356a4fb"
+    },
+    {
+      "name": "pulse-active",
+      "file": "hooks/pulse-active.sh",
+      "type": "UserPromptSubmit",
+      "trigger": "every user prompt",
+      "purpose": "Marque l'agent courant comme actif (status medium/high) à chaque message utilisateur via pulse-set-active.js",
+      "inputs": [
+        "hostname (os)",
+        "pouls.md via chemin direct buildAgentId"
+      ],
+      "outputs": [
+        "updates status + lastPulse in .claude/agents/<agentId>/pouls.md"
+      ],
+      "rule": "§0 Pulse system — activité automatique sans scan récursif",
+      "test": null,
+      "exitCodes": {
+        "0": "always (silent, errors logged to /tmp/masterclaude-pulse.log)"
+      },
+      "sha256": "784f5e33071869e7"
+    },
+    {
       "name": "session-handoff-restore",
       "file": "hooks/session-handoff-restore.sh",
       "type": "SessionStart",
@@ -452,12 +492,12 @@
     }
   ],
   "stats": {
-    "total": 22,
+    "total": 24,
     "byType": {
       "helper": 1,
-      "SessionStart": 5,
+      "SessionStart": 6,
       "Stop": 2,
-      "UserPromptSubmit": 4,
+      "UserPromptSubmit": 5,
       "PreToolUse": 4,
       "PostToolUse": 4,
       "PreToolUse + PostToolUse": 1
