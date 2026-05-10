@@ -14,7 +14,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MAILBOX = join(ROOT, 'vault', '10-mailbox.md');
 const DISCOVERIES = join(ROOT, 'vault', '30-discoveries.md');
 const ROADMAP = join(ROOT, 'vault', '40-roadmap.md');
-const OBSIDIAN_VAULT = '/Users/malik/Vault/Malik';
+const OBSIDIAN_VAULT = process.env.OBSIDIAN_VAULT_PATH || '/Users/malik/Vault/Malik';
 
 function now() {
   return new Date().toISOString().replace('T', ' ').slice(0, 16);
@@ -149,7 +149,8 @@ function appendToMailbox(entries) {
   if (idx === -1) {
     updated = mailbox + '\n' + block;
   } else {
-    const insertAt = mailbox.indexOf('\n', idx) + 1;
+    const nlIdx = mailbox.indexOf('\n', idx);
+    const insertAt = nlIdx === -1 ? idx + marker.length : nlIdx + 1;
     updated = mailbox.slice(0, insertAt) + '\n' + block + mailbox.slice(insertAt);
   }
   writeFileSync(MAILBOX, updated, 'utf8');
