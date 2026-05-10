@@ -15,6 +15,68 @@ export const MAX_HOURS  = parseInt(process.env.MARKETPLACE_MAX_HOURS  || '24',  
 // Cache pour éviter de re-bidder un fichier déjà pris dans la même session
 const _taken = new Set();
 
+// ─── Ledger (offre/demande) ─────────────────────────────────────────────────
+
+function getLedger(agentId) {
+  const data = ghApi(`ledger/${agentId}.json`);
+  if (!data?.content) return { balance: 0, history: [], sha: null };
+  try {
+    const parsed = JSON.parse(Buffer.from(data.content, 'base64').toString());
+    return { ...parsed, sha: data.sha };
+  } catch { return { balance: 0, history: [], sha: null }; }
+}
+
+function updateBalance(agentId, delta, reason) {
+  const ledger = getLedger(agentId);
+  const newBalance = (ledger.balance || 0) + delta;
+  if (newBalance < 0) {
+    process.stdout.write(`[marketplace] solde insuffisant pour ${agentId} (${ledger.balance} < ${-delta})\n`);
+    return false;
+  }
+  const entry = { ts: new Date().toISOString(), delta, reason, balance: newBalance };
+  const updated = {
+    agent_id: agentId,
+    balance: newBalance,
+    updated_at: entry.ts,
+    history: [...(ledger.history || []).slice(-49), entry],
+  };
+  const encoded = Buffer.from(JSON.stringify(updated, null, 2)).toString('base64');
+  const fields = {
+    message: `ledger: ${delta >= 0 ? '+' : ''}${delta} crédits (${reason}) → ${newBalance}`,
+    content: encoded,
+  };
+  if (ledger.sha) fields.sha = ledger.sha;
+  const r = ghApi(`ledger/${agentId}.json`, { method: 'PUT', fields });
+  if (!r) {
+    process.stdout.write(`[marketplace] échec mise à jour ledger ${agentId}\n`);
+    return false;
+  }
+  process.stdout.write(`[marketplace] ledger ${agentId} : ${delta >= 0 ? '+' : ''}${delta} (${reason}) → ${newBalance}\n`);
+  return true;
+}
+
+export function getBalance(agentId = AGENT_ID) {
+  const ledger = getLedger(agentId);
+  return ledger.balance ?? 0;
+}
+
+export function initLedger(agentId = AGENT_ID, initialBalance = 1000) {
+  const existing = ghApi(`ledger/${agentId}.json`);
+  if (existing?.content) return false; // déjà initialisé
+  const data = {
+    agent_id: agentId,
+    balance: initialBalance,
+    updated_at: new Date().toISOString(),
+    history: [{ ts: new Date().toISOString(), delta: initialBalance, reason: 'init', balance: initialBalance }],
+  };
+  const encoded = Buffer.from(JSON.stringify(data, null, 2)).toString('base64');
+  ghApi(`ledger/${agentId}.json`, {
+    method: 'PUT',
+    fields: { message: `ledger: init ${agentId} (${initialBalance} crédits)`, content: encoded },
+  });
+  return true;
+}
+
 function ghApi(path, opts = {}) {
   const args = ['api', `repos/${REPO}/contents/${path}`];
   if (opts.method) args.push('-X', opts.method);
@@ -80,6 +142,10 @@ function claimAnnouncement(filename, announcement, sha) {
   });
   if (!create) return false;
 
+  // Bloquer les crédits du poster (débit escrow)
+  const poster = announcement.posted_by;
+  if (poster) updateBalance(poster, -(announcement.budget_credits || 0), `escrow:${filename}`);
+
   // DELETE avec le SHA frais — si 422, un autre agent a déjà supprimé (on ignore)
   ghApi(`open/${filename}`, {
     method: 'DELETE',
@@ -116,6 +182,10 @@ export function completeAnnouncement(filename, takenContent, _tSha, result) {
       fields: { message: `feat: remove from taken — done`, sha: tSha },
     });
   }
+
+  // Créditer l'exécutant
+  const budget = takenContent.budget_credits || 0;
+  if (budget > 0) updateBalance(AGENT_ID, budget, `task_done:${filename}`);
 }
 
 function isMatch(announcement, agentSkills) {
