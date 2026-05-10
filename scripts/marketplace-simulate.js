@@ -13,8 +13,8 @@ function fakeSha() { return randomBytes(8).toString('hex'); }
 
 function mockGhApi(path, opts = {}) {
   if (!opts.method || opts.method === 'GET') {
-    if (path.includes('/') && !STORE[path]) {
-      // Lister un dossier
+    // Tenter listing dossier : si aucune entrée directe mais des clés enfants existent
+    if (!STORE[path]) {
       const prefix = path + '/';
       const entries = Object.keys(STORE)
         .filter(k => k.startsWith(prefix) && !k.slice(prefix.length).includes('/'))
@@ -22,7 +22,6 @@ function mockGhApi(path, opts = {}) {
       return entries.length ? entries : null;
     }
     const entry = STORE[path];
-    if (!entry) return null;
     return { content: entry.content.toString('base64'), sha: entry.sha };
   }
   if (opts.method === 'PUT') {
