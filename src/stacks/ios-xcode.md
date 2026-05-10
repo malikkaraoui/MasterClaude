@@ -241,6 +241,125 @@ for [iOS/tvOS]. Use xcodebuild + simctl.
 Generate unit tests for this service. Cover success + failure cases.
 ```
 
+## Bonnes pratiques systématiques — App Store
+
+Ces patterns sont incontournables. Steve les propose systématiquement sur toute app iOS.
+
+### Dark Mode automatique
+
+```swift
+// ✅ Correct — semantic colors
+Text("Titre").foregroundStyle(.primary)
+Color("Surface") // Asset Catalog avec variant Any/Dark
+
+// ❌ Interdit — hardcodé
+Text("Titre").foregroundColor(.black)
+```
+
+Ne pas forcer `UIUserInterfaceStyle` dans `Info.plist`. Créer chaque couleur custom en Asset Catalog avec appearance Any + Dark. Tester : simulateur → Features → Toggle Appearance.
+
+### Internationalisation (i18n)
+
+Dès le premier écran. Minimum FR + EN.
+
+```text
+App/Resources/
+├── fr.lproj/Localizable.strings
+└── en.lproj/Localizable.strings
+```
+
+```swift
+Text(String(localized: "onboarding.title"))
+```
+
+Règle : aucun texte visible en string littérale directe dans une View.
+
+### Notation App Store
+
+```swift
+import StoreKit
+
+func requestReviewIfAppropriate(after actionsCount: Int) {
+    guard actionsCount >= 3 else { return }
+    guard let scene = UIApplication.shared.connectedScenes
+        .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene
+    else { return }
+    SKStoreReviewController.requestReview(in: scene)
+}
+```
+
+Règle : jamais au lancement, jamais après un échec. Apple limite à 3 demandes/an automatiquement.
+
+### Share Sheet
+
+```swift
+ShareLink(
+    item: URL(string: "https://apps.apple.com/app/idXXXXXXXXX")!,
+    subject: Text("Découvre cette app"),
+    message: Text("Je pense que ça pourrait t'intéresser !")
+) {
+    Label("Partager l'app", systemImage: "square.and.arrow.up")
+}
+```
+
+### Écran Réglages / À propos
+
+Structure minimale obligatoire dans toute app :
+
+```swift
+struct SettingsView: View {
+    private var appVersion: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "v\(v) (\(b))"
+    }
+
+    var body: some View {
+        List {
+            Section(String(localized: "settings.appearance")) {
+                Text(String(localized: "settings.appearance.auto"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section(String(localized: "settings.language")) {
+                Button(String(localized: "settings.language.change")) {
+                    UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
+                }
+            }
+            Section {
+                ShareLink(item: URL(string: "https://apps.apple.com/app/idXXXXXXXXX")!) {
+                    Label(String(localized: "settings.share"), systemImage: "square.and.arrow.up")
+                }
+                Link(destination: URL(string: "https://apps.apple.com/app/idXXXXXXXXX?action=write-review")!) {
+                    Label(String(localized: "settings.rate"), systemImage: "star")
+                }
+            }
+            Section(String(localized: "settings.about")) {
+                LabeledContent(String(localized: "settings.version"), value: appVersion)
+                Link(String(localized: "settings.privacy"),
+                     destination: URL(string: "https://example.com/privacy")!)
+                Link(String(localized: "settings.terms"),
+                     destination: URL(string: "https://example.com/terms")!)
+            }
+        }
+        .navigationTitle(String(localized: "settings.title"))
+    }
+}
+```
+
+Remplacer `idXXXXXXXXX` par l'Apple ID réel dès qu'il est connu. Le noter dans `CLAUDE.md` projet.
+
+### Checklist pré-soumission App Store
+
+- [ ] Dark mode testé sur tous les écrans (Features → Toggle Appearance)
+- [ ] Toutes les strings visibles dans `Localizable.strings` (FR + EN)
+- [ ] `SKStoreReviewController` déclenché après action positive (pas au lancement)
+- [ ] `ShareLink` vers l'App Store présent dans `SettingsView`
+- [ ] `SettingsView` : version, privacy URL, terms URL, notation, partage, langue
+- [ ] `CFBundleShortVersionString` et `CFBundleVersion` incrémentés
+- [ ] Screenshots préparés pour toutes les tailles (6.7", 6.5", 5.5", iPad si applicable)
+- [ ] Privacy manifest (`PrivacyInfo.xcprivacy`) si APIs sensibles
+- [ ] App Review Information remplie (notes + URL démo si compte requis)
+
 ## CLAUDE.md recommandé pour un projet Apple
 
 ```markdown
