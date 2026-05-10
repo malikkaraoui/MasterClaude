@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "subject": "Marketplace inter-agents v2 — crédits, réputation, ban, caution, simulation",
+    "date": "2026-05-10",
+    "type": "review",
+    "priority": "haute",
+    "reviewedRange": "1e8dd089bfd4126e3ed75078c58b3f415e1ca84e..17140a2943753cb4e537bf527967afe853e00ace"
+  },
+  "from": {
+    "model": "claude-sonnet-4-6",
+    "context": "7 commits sur le range : (1) fix signal spawn session (62225d6), (2) fix handoff-debt ancestry (4ae6767), (3) fix reviewedRange handoff #18 (fef5097), (4) feat marketplace auto-bid + ESM import fix + poll/claim/complete (5d5d2b4), (5) fix optimistic locking SHA avant claim (d057c6e), (6) feat système crédits ledger escrow/claim/done (26d73dd), (7) feat marketplace v2 complet — réputation 0-100, rating 1-5★, ban permanent ≤15pts, cooldown 2h, caution 10%, timeout 24h, rate-limit 5 claims/h, simulation in-memory 4 scénarios (17140a2). Fichiers principaux : src/marketplace/index.js (réécriture complète, +481 lignes), scripts/marketplace-simulate.js (nouveau, simulation 4 scénarios), bin/master.js (import ESM + intégration polling), README.md (section marketplace inter-agents).",
+    "question": "Dans src/marketplace/index.js, les fonctions ghWrite/ghDelete/ghRead utilisent spawnSync avec gh api — est-ce que le mécanisme d'optimistic locking dans _claim() est réellement atomique face à 200 agents concurrents sur GitHub API, ou existe-t-il une fenêtre de race condition entre le ghRead (GET SHA) et le ghWrite (PUT taken/) qui invalide la garantie d'exclusivité du claim ?",
+    "filesToRead": [
+      "src/marketplace/index.js",
+      "scripts/marketplace-simulate.js",
+      "bin/master.js"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
