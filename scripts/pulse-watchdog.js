@@ -5,12 +5,12 @@
  * Toutes les 2 min (LaunchAgent) :
  *   1. Scan tous les pouls.md
  *   2. CRASH = TTL expiré ET status != idle/off
- *   3. STALE = TTL * 5 expiré ET status == idle (nettoyage optionnel)
+ *   3. STALE = TTL * 10 expiré ET status == idle (nettoyage optionnel)
  *   4. Actions : Telegram alert + injection terminal via osascript
  *   5. Écrit un marqueur pour éviter les alertes répétées
  */
 
-import { readdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -42,8 +42,11 @@ function loadAlertCache() {
 }
 
 function saveAlertCache(cache) {
-  try { writeFileSync(ALERT_CACHE, JSON.stringify(cache), 'utf8'); }
-  catch { /* non bloquant */ }
+  const tmp = ALERT_CACHE + '.tmp.' + process.pid;
+  try {
+    writeFileSync(tmp, JSON.stringify(cache), 'utf8');
+    renameSync(tmp, ALERT_CACHE);
+  } catch { /* non bloquant */ }
 }
 
 // Envoie un message Telegram via l'API directement (FIFO peut être absent)
@@ -173,7 +176,7 @@ for (const filePath of files) {
 
     // Marquer le pouls comme crashed pour éviter faux-positifs
     try {
-      writePoulsMd(filePath, { ...pouls, status: 'idle', lastPulse: new Date().toISOString() }, pouls._body);
+      writePoulsMd(filePath, { ...pouls, status: 'idle' }, pouls._body);
     } catch { /* non bloquant */ }
 
     // Chercher et réinjecter dans le terminal
