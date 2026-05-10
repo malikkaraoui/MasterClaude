@@ -11,11 +11,12 @@
     "context": "4 commits depuis le dernier handoff intégré (pulse-autonomous-session-detection) : (1) feat abec9fd — pulse-watchdog : détection crash agents + alerte Telegram + injection terminal (LaunchAgent macOS, fichiers pulse YAML TTL-based, osascript guard) ; (2) fix 9a60044 — appliquer review Copilot #20 (8 points : erreurs silencieuses, VAULT_PATH configurable, insertion string sans newline, race condition pulse-set-active.js) ; (3) fix b875b95 — ajouter pulse-init et pulse-active au hooks-manifest pour npm test ; (4) feat c2b41a2 — sync bonnes pratiques iOS Steve (dark mode semantic colors, i18n Localizable.strings, SKStoreReviewController, ShareLink, SettingsView template) vers MasterClaude depuis claude-atelier.",
     "question": "Le pulse-watchdog (abec9fd) démarre un LaunchAgent macOS qui écrit des fichiers YAML dans /tmp et envoie des alertes Telegram — mais si le daemon redémarre après un crash, il risque de relire des fichiers pulse périmés (TTL expiré) et d'envoyer de fausses alertes 'agent KO'. Le nettoyage des pulses périmés est-il atomique et le daemon est-il réellement idempotent au redémarrage ?",
     "filesToRead": [
-      "src/hooks/pulse-watchdog.js",
-      "src/hooks/pulse-set-active.js",
-      "src/hooks/pulse-init.js",
+      "scripts/pulse-watchdog.js",
+      "scripts/pulse-set-active.js",
+      "scripts/pulse-ensure-init.js",
       "com.masterclaude.pulse-watchdog.plist",
       ".claude/hooks-manifest.json",
+      "src/pulse/write.js",
       "src/stacks/ios-xcode.md"
     ],
     "constraints": [
@@ -26,9 +27,11 @@
     ]
   },
   "response": {
-    "model": null,
-    "content": null,
-    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+    "model": "github-copilot-pr-reviewer",
+    "content": "7 points identifiés : (1) Commentaire STALE incorrect (TTL*5 vs TTL*10 réel dans isLongIdle ligne 152) — aligner doc et code. (2) Import `existsSync` inutilisé ligne 13 — retirer. (3) `saveAlertCache()` non-atomique — écrire dans fichier tmp puis rename pour éviter corruption JSON si deux exécutions launchd concurrent. (4) Crash handler ligne 176 réinitialise `lastPulse` à now — masque l'expiration réelle, fausse les dashboards et retarde redétection KO ; ne pas modifier `lastPulse`, laisser le cache d'alertes garantir l'idempotence. (5) `cwd` non-échappé dans YAML (write.js ligne 27) — un chemin contenant `\"` ou `\\` corrompt le frontmatter. (6) `filesToRead` pointait vers `src/hooks/` inexistant — corriger vers `scripts/` et `src/pulse/`. (7) Idempotence au redémarrage : avec le fix (3) et (4) combinés, le daemon est idempotent — le cache JSON survit au rename atomique et le `lastPulse` original révèle l'expiration même après restart."
   },
-  "integration": null
+  "integration": {
+    "retained_implement": "Fix (1) commentaire STALE TTL*10 appliqué. Fix (2) import existsSync supprimé, renameSync ajouté. Fix (3) saveAlertCache atomique via fichier tmp + rename. Fix (4) lastPulse non réinitialisé au crash — idempotence préservée. Fix (5) cwd échappé dans serialisePoulsMd. Fix (6) filesToRead corrigés vers chemins réels scripts/ et src/pulse/.",
+    "verdict": "6 fixes appliqués sur 7 commentaires. Le daemon est désormais idempotent au redémarrage : alertes sans doublons, lastPulse préservé pour détection correcte de KO persistant, écriture JSON sans race condition. Point (7) confirmation d'idempotence — pas de code à changer, validation architecturale uniquement."
+  }
 }
