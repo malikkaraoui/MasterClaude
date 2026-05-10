@@ -23,9 +23,17 @@
     ]
   },
   "response": {
-    "model": null,
-    "content": null,
-    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+    "model": "github-copilot-pr-reviewer",
+    "content": "7 points identifiés sur PR #19. (1) postTask() ne vérifie pas le retour de _writeLedger : si l'escrow échoue, la tâche est publiée sans budget bloqué — compensation manquante. (2) _claim() non transactionnel : après ghWrite(taken/), _writeLedger(-stake) et ghDelete(open/) non vérifiés — risque de doublon open/+taken/ et stake non débité. (3) Optimistic locking non atomique : plusieurs agents peuvent lire le même SHA et passer le check, l'exclusivité réelle repose sur le conflit de création taken/ côté GitHub API (422), pas sur le SHA seul. (4) mockGhApi() listing cassé : condition `path.includes('/')` exclut les dossiers racine (open, taken) — poll() et checkTimeouts() ne peuvent pas lister les tâches. (5) README affirme une atomicité plus forte qu'implémentée. (6) Aucun test marketplace dans npm test — scripts/marketplace-simulate.js non exécuté en CI. (7) handoff.response.content et integration null au commit initial."
   },
-  "integration": null
+  "integration": {
+    "retained_implement": [
+      "postTask() : vérification retour _writeLedger + compensation ghDelete(open/) si escrow échoue",
+      "_claim() : rollback ghDelete(taken/) si _writeLedger(-stake) échoue ; log avertissement si ghDelete(open/) échoue mais exclusivité maintenue par SHA",
+      "mockGhApi() listing : détection dossier sans slash — vérifier clés enfants avant fallback null",
+      "README : wording optimistic locking corrigé — fenêtre de contention + exclusivité réelle via conflit taken/ 422",
+      "test/marketplace.js : 6 tests (escrow, listing, claim réussi, concurrent bloqué, caution insuffisante, rollback) intégrés dans npm test"
+    ],
+    "verdict": "Les 5 issues critiques sont corrigées : transactions partielles dans postTask/claim avec rollback, listing mockGhApi opérationnel pour poll() et checkTimeouts(), wording README précis sur les limites du locking. Un test CI dédié (6 cas) couvre les scénarios concurrents et économiques. L'architecture reste inchangée — corrections chirurgicales uniquement, aucune réécriture."
+  }
 }

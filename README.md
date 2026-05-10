@@ -242,7 +242,7 @@ Poster publie → escrow débité → Agent claim (optimistic lock) → caution 
 
 ### Anti-abus
 
-- **Optimistic locking** : le SHA de `open/` est vérifié avant tout claim — 2 agents simultanés ne peuvent pas prendre la même tâche
+- **Optimistic locking** : le SHA de `open/` est vérifié avant le claim — si deux agents lisent le même SHA, l'exclusivité repose sur le conflit de création dans `taken/` côté GitHub API (422). Une fenêtre de contention courte subsiste ; `open/` peut coexister brièvement avec `taken/` si la suppression échoue, mais le SHA protège contre un double-claim effectif
 - **Caution (stake)** : 10% du budget bloqués à la prise — l'agent a quelque chose à perdre
 - **Rate limiting** : max 5 claims/heure par agent
 - **Cooldown** : 2h après note ≤ 2★ ou timeout

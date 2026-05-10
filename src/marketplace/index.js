@@ -196,7 +196,12 @@ export function postTask({ skill, description, budget_credits, deadline_hours = 
     _v: 2,
   };
   if (!ghWrite(`open/${id}.json`, task, null, `post: ${id} (${skill}, ${budget_credits}cr)`)) return null;
-  _writeLedger(posted_by, -budget_credits, `escrow:${id}`);
+  if (!_writeLedger(posted_by, -budget_credits, `escrow:${id}`)) {
+    // Compensation : supprimer la tâche publiée si l'escrow échoue
+    const pub = ghApi(`open/${id}.json`);
+    if (pub?.sha) ghDelete(`open/${id}.json`, pub.sha, `rollback escrow:${id}`);
+    return null;
+  }
   process.stdout.write(`[marketplace] 📋 tâche publiée : ${id} (${skill}, ${budget_credits} crédits)\n`);
   return { id, filename: `${id}.json`, task };
 }
@@ -234,8 +239,16 @@ function _claim(filename, announcement, sha) {
   };
 
   if (!ghWrite(`taken/${filename}`, taken, null, `claim: ${filename} by ${agentId}`)) return false;
-  _writeLedger(agentId, -stake, `stake:${announcement.id}`);
-  ghDelete(`open/${filename}`, fresh.sha, `open→taken: ${filename}`);
+  if (!_writeLedger(agentId, -stake, `stake:${announcement.id}`)) {
+    // Rollback : supprimer taken/ si le débit de caution échoue
+    const t = ghApi(`taken/${filename}`);
+    if (t?.sha) ghDelete(`taken/${filename}`, t.sha, `rollback stake:${filename}`);
+    return false;
+  }
+  if (!ghDelete(`open/${filename}`, fresh.sha, `open→taken: ${filename}`)) {
+    // open/ non supprimé : les agents verront conflit SHA sur le prochain claim (taken/ existe déjà)
+    process.stdout.write(`[marketplace] ⚠️  open/${filename} non supprimé — conflit SHA protège l'exclusivité\n`);
+  }
   return { stake };
 }
 
