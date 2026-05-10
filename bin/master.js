@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync as _rfs, writeFileSync as _wfs, existsSync as _exists, unlinkSync as _unlink, mkdirSync as _mkdir, statSync as _stat } from 'node:fs';
 import { loadVaultBrief } from '../src/master/vault-loader.js';
 import { handleOffline } from '../src/master/secretaire.js';
+import * as _marketplaceModule from '../src/marketplace/index.js';
 
 // Transcription daemon (TRANSCRIBE_SCRIPT défini après __dirname, ligne ~27)
 const TRANSCRIBE_SOCK = '/tmp/tg-transcribe.sock';
@@ -126,6 +127,72 @@ function scheduleBusPoll() {
   if (!_busBackoffTimer) setInterval(pollBusMessages, 30000);
 }
 
+// --- Marketplace poller — vérifie les annonces disponibles quand session idle ---
+async function pollMarketplace() {
+  if (!marketplace) return;
+  try {
+    const result = await marketplace.poll(readSessionSignal);
+    if (!result?.claimed) return;
+
+    const { filename, task } = result;
+    const prompt = marketplace.buildTaskPrompt(task);
+    await send(`📋 Marketplace : tâche prise — ${task.skill} (${task.budget_credits} crédits)\n${task.description?.slice(0, 120)}…`).catch(() => {});
+
+    // Injecter la tâche comme message inbox → session-ipc-bridge.sh la récupère au démarrage
+    const id = `mkt-${task.id || Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const entry = JSON.stringify({ id, ts: Date.now(), user: `MARKETPLACE TASK:\n${prompt}`, project: 'MasterClaude' });
+    try { _wfs(INBOX_FILE, entry + '\n', { flag: 'a' }); } catch {}
+
+    // Spawn session — la session lira l'orphan via session-ipc-bridge.sh
+    const ok = await wakeClaudeSession();
+    if (!ok) {
+      await send('⚠️ Marketplace : spawn échoué pour la tâche.').catch(() => {});
+      return;
+    }
+
+    // Polling du fichier résultat (10 min max)
+    const resultFile = `/tmp/marketplace-result-${task.id || 'unknown'}.txt`;
+    const responseFile = join(RESPONSE_DIR, `${id}.txt`);
+    let taskResult = null;
+    for (let i = 0; i < 1200; i++) {
+      if (_exists(resultFile)) {
+        taskResult = _rfs(resultFile, 'utf8').trim();
+        try { _unlink(resultFile); } catch {}
+        break;
+      }
+      if (_exists(responseFile)) {
+        taskResult = _rfs(responseFile, 'utf8').trim();
+        try { _wfs(`${responseFile}.done`, ''); _unlink(responseFile); } catch {}
+        break;
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    if (taskResult) {
+      // Marquer done dans le repo marketplace
+      const takenData = { id: task.id, skill: task.skill, description: task.description,
+        budget_credits: task.budget_credits, deadline: task.deadline,
+        winner_id: process.env.MARKETPLACE_AGENT_ID || 'masterclaude@malik' };
+      marketplace.completeAnnouncement(filename, takenData, null, taskResult);
+      await send(`✅ Marketplace : tâche terminée — ${filename}\n${taskResult.slice(0, 200)}`).catch(() => {});
+    } else {
+      await send(`⏰ Marketplace : timeout 10min — tâche ${filename} non complétée.`).catch(() => {});
+    }
+  } catch (e) {
+    process.stderr.write(`[marketplace] erreur poll: ${e.message}\n`);
+  }
+}
+
+function scheduleMarketplacePoll() {
+  if (!marketplace) return;
+  const pollSec = (marketplace.POLL_SEC || 300) * 1000;
+  // Premier tick après 30s (laisser le daemon démarrer complètement)
+  setTimeout(async () => {
+    await pollMarketplace();
+    setInterval(pollMarketplace, pollSec);
+  }, 30000);
+}
+
 async function dispatchBusMessage(msg) {
   const { from, type, payload } = msg;
   switch (type) {
@@ -198,13 +265,17 @@ loadEnv(join(ROOT, '.env.local'));
 // --- Feature flags parachute (Étape 6) ---
 const PARACHUTE_BASE = process.env.PARACHUTE_BASE || 'http://127.0.0.1:4001';
 const PARACHUTE_TOKEN_HDR = process.env.PARACHUTE_TOKEN ? `Bearer ${process.env.PARACHUTE_TOKEN}` : '';
-const FLAG_TELEGRAM = process.env.PARACHUTE_TELEGRAM_TAKEOVER === '1';
-const FLAG_SESSION  = process.env.PARACHUTE_SESSION_TAKEOVER === '1';
-const FLAG_HANDOFF  = process.env.PARACHUTE_HANDOFF_TAKEOVER === '1';
+const FLAG_TELEGRAM    = process.env.PARACHUTE_TELEGRAM_TAKEOVER === '1';
+const FLAG_SESSION     = process.env.PARACHUTE_SESSION_TAKEOVER === '1';
+const FLAG_HANDOFF     = process.env.PARACHUTE_HANDOFF_TAKEOVER === '1';
+const FLAG_MARKETPLACE = process.env.MARKETPLACE_ENABLED === '1';
 
 if (FLAG_SESSION || FLAG_HANDOFF || FLAG_TELEGRAM) {
   process.stdout.write(`[master] parachute flags: telegram=${FLAG_TELEGRAM} session=${FLAG_SESSION} handoff=${FLAG_HANDOFF}\n`);
 }
+
+const marketplace = FLAG_MARKETPLACE ? _marketplaceModule : null;
+if (marketplace) process.stdout.write(`[marketplace] activé — agent=${process.env.MARKETPLACE_AGENT_ID || 'masterclaude@malik'} poll=${marketplace.POLL_SEC}s\n`);
 
 /** Appelle l'API HTTP parachute (port 4001). */
 function parachuteRequest(method, path, body) {
@@ -1042,6 +1113,7 @@ try { _wfs(COMPACT_COUNT_FILE, '0\n'); } catch {}
 ensureTranscribeDaemon();
 setInterval(pollParachuteAlerts, 30000);
 scheduleBusPoll();
+scheduleMarketplacePoll();
 
 await send('🟢 Master Claude Atelier en ligne\nTape /help pour les commandes.').catch(e => {
   process.stderr.write(`[master] warn: ${e.message}\n`);
