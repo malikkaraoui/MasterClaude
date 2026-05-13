@@ -1091,7 +1091,7 @@ const HELP = `Commandes Master :
 /projet off — revenir en mode global
 /register <nom> <chemin> — enregistrer un projet
 /reset — vider l'historique de la session
-/run <tâche> — exécute une tâche (outils complets) sur le projet actif
+/run [projet] <tâche> — exécute une tâche sur le projet nommé ou le projet actif
 /trigger <tâche> — lance RemoteTrigger cloud (Bash complet, répond ici directement)
 /migrate [raison] — demande à Claude de préparer un handoff puis migre la session (kill + nouvelle)`;
 
@@ -1266,12 +1266,26 @@ while (running) {
         continue;
       }
 
-      // Commande projet direct : /run <prompt> → spawn claude sur projet actif (outils complets)
+      // /run [projet] <tâche> → spawn claude sur le projet nommé ou le projet actif
       if (text.startsWith('/run ')) {
-        const prompt = text.slice(5).trim();
-        const projectPath = sessions.active ? sessions.active.path : ROOT;
-        const projectName = sessions.active ? sessions.active.name : 'MasterClaude';
-        await send(`⚙️ Lancement sur ${projectName} (outils complets)…`);
+        const args = text.slice(5).trim();
+        const firstWord = args.split(' ')[0];
+        const resolved = sessions.resolve(firstWord);
+        let projectPath, projectName, prompt;
+        if (resolved) {
+          projectPath = resolved.path;
+          projectName = resolved.name;
+          prompt = args.slice(firstWord.length).trim();
+        } else {
+          projectPath = sessions.active ? sessions.active.path : ROOT;
+          projectName = sessions.active ? sessions.active.name : 'MasterClaude';
+          prompt = args;
+        }
+        if (!prompt) {
+          await send(`❌ Tâche vide. Usage : /run [projet] <tâche>`).catch(() => {});
+          continue;
+        }
+        await send(`⚙️ ${projectName} — "${prompt}"…`);
         const result = await spawnProjectSession(projectPath, prompt);
         await send(result || '✅ Terminé (pas de sortie)').catch(() => {});
         continue;
