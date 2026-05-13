@@ -1216,7 +1216,10 @@ while (running) {
 
       if (!msg?.text) continue;
 
-      const text = msg.text.trim();
+      // Strip @botname prefix (mention Telegram groupe ou habitude utilisateur)
+      let text = msg.text.trim();
+      const mentionMatch = text.match(/^@\S+\s+([\s\S]+)$/);
+      if (mentionMatch) text = mentionMatch[1].trim();
       process.stdout.write(`[master] reçu: ${text}\n`);
 
       // Commandes système
