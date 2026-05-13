@@ -68,6 +68,17 @@ export class SessionManager {
     return null;
   }
 
+  // Résout un nom/chemin en { name, path } sans changer le projet actif
+  resolve(nameOrPath) {
+    if (this._registry[nameOrPath]) {
+      return { name: nameOrPath, path: this._registry[nameOrPath] };
+    }
+    if (existsSync(nameOrPath)) {
+      return { name: nameOrPath.split('/').pop(), path: nameOrPath };
+    }
+    return null;
+  }
+
   // Retourne le cwd à utiliser pour claude --print
   getCwd(fallbackRoot) {
     return this._active?.path || fallbackRoot;
