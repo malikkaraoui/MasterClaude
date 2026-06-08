@@ -1,15 +1,13 @@
 #!/usr/bin/env node
 // SessionStart hook — crée pouls.md pour l'agent courant si absent
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hostname } from 'node:os';
-import { readdirSync } from 'node:fs';
 import { parsePoulsMd } from '../src/pulse/parse.js';
 import { writePoulsMd } from '../src/pulse/write.js';
 import { computeIntensity, intensityToStatus, getProfile } from '../src/pulse/intensity.js';
 import { buildAgentId, buildAgentName, buildKnownAgentIds } from '../src/pulse/identity.js';
-import { readFileSync } from 'node:fs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW_HOSTNAME = hostname();

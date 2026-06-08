@@ -167,15 +167,12 @@ fi
 # Divisée par la fenêtre réelle (1M pour modèle suffixé [1m], 200K sinon)
 # Bug fix : input_tokens seul ne reflète que l'uncached (~0 quand cache hit) → faux 0%
 #
-# Skip VSCode : le plugin Claude Code dans VSCode ne propage pas le suffixe [1m]
-# dans le champ `model` → division par 200K alors qu'on est en 1M → faux 117%.
-# Détection : TERM_PROGRAM=vscode ou CLAUDE_CODE_ENTRYPOINT contient "vscode".
+# Robustesse fenêtre : si le suffixe `[1m]` est perdu (plugin VSCode, transcript
+# compacté, fork IDE…), le fallback Python ci-dessous détecte que `last_total > 200K`
+# et bascule sur la fenêtre 1M. Clamp final à 99% pour qu'un > 100% trahisse toujours
+# une détection foireuse plutôt que d'afficher un nombre absurde.
 CTX_INDICATOR=""
-_IS_VSCODE=""
-if [ "$TERM_PROGRAM" = "vscode" ] || [[ "$CLAUDE_CODE_ENTRYPOINT" == *vscode* ]] || [ -n "$VSCODE_PID" ] || [ -n "$VSCODE_IPC_HOOK_CLI" ]; then
-  _IS_VSCODE="1"
-fi
-if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] && [ -z "$_IS_VSCODE" ]; then
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   _CTX_PCT=$(python3 - "$TRANSCRIPT" "$MODEL_RAW" <<'PYEOF'
 import sys, json
 path = sys.argv[1]

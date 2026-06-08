@@ -67,23 +67,8 @@ function sendTelegram(text) {
 function findTerminalTab(cwd) {
   if (!cwd) return null;
 
-  const script = `
-    set targetCwd to "${cwd}"
-    set found to {}
-    tell application "Terminal"
-      repeat with w in windows
-        repeat with t in tabs of w
-          set tPwd to do shell script "lsof -p " & (id of processes of t as string) & " 2>/dev/null | awk '/cwd/{print $NF}' | head -1" with administrator privileges
-          if tPwd contains targetCwd then
-            set end of found to {windowIdx:index of w, tabIdx:index of t}
-          end if
-        end repeat
-      end repeat
-    end tell
-    return found
-  `;
-
-  // Approche plus simple et fiable : chercher par titre de fenêtre
+  // Approche par titre de fenêtre — la voie `lsof + administrator privileges`
+  // a été retirée : elle déclenchait un prompt sudo dans un watchdog non-interactif.
   const simplScript = `
     set results to ""
     tell application "Terminal"
@@ -149,7 +134,6 @@ for (const filePath of files) {
   const age = ageSeconds(pouls);
   const ttl = pouls.ttl ?? 300;
   const cwd = pouls.cwd ?? '';
-  const name = pouls.agent?.name ?? agentId;
 
   const isCrashed = isExpired(pouls) && status !== 'idle' && status !== 'off';
   const isLongIdle = age > ttl * 10 && (status === 'idle' || status === 'off');
