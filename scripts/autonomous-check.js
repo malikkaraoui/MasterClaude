@@ -14,7 +14,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MAILBOX = join(ROOT, 'vault', '10-mailbox.md');
 const DISCOVERIES = join(ROOT, 'vault', '30-discoveries.md');
 const ROADMAP = join(ROOT, 'vault', '40-roadmap.md');
-const OBSIDIAN_VAULT = process.env.OBSIDIAN_VAULT_PATH || '/Users/malik/Vault/Malik';
+const OBSIDIAN_VAULT = process.env.OBSIDIAN_VAULT_PATH || join(process.env.HOME ?? '', 'Vault', 'Malik');
 
 function now() {
   return new Date().toISOString().replace('T', ' ').slice(0, 16);
