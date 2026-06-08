@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "subject": "Architecture sub-agents par projet (@mention + /run multi-projets) + fix CTX VSCode",
+    "date": "2026-06-08",
+    "type": "review",
+    "priority": "moyenne",
+    "reviewedRange": "c2b41a2..7e17ce1"
+  },
+  "from": {
+    "model": "claude-opus-4-7",
+    "context": "Cinq commits depuis le dernier handoff intégré (c2b41a2), qui couvrent deux chantiers liés :\n\n1. **Architecture sub-agents par projet** (commits baffb1a, 48f85c4, 9e489c3, 2ed9fe3) :\n   - baffb1a : handoff review pulse-watchdog-steve-ios (review Copilot #21 sur la précédente itération).\n   - 48f85c4 : application de la review Copilot #21 — 6 points d'idempotence sur pulse-watchdog + escaping write.js (scripts/pulse-watchdog.js, src/pulse/write.js).\n   - 9e489c3 : architecture sub-agents — @mention strip + désactivation hooks Telegram dans les projets enfants (bin/master.js, src/master/session-manager.js). Idée : le master daemon spawn un sub-agent `claude` par projet, isole les hooks Telegram pour qu'ils ne tournent que dans le master, et strippe les @mentions pour le routing.\n   - 2ed9fe3 : `/run` accepte un projet en paramètre (`/run site fix le menu` → routing vers le projet `site`). Patch sur bin/master.js + session-manager (ajout de `resolve()`).\n\n2. **Fix CTX VSCode** (commit 7e17ce1) :\n   - hooks/model-metrics.sh : le plugin Claude Code dans VSCode ne propage pas le suffixe `[1m]` dans le champ `model` du transcript → le hook divise par 200K au lieu de 1M → affichage de `117%🚨` sur ~234K tokens réels (au lieu de ~23%).\n   - Deux corrections : (a) skip entier du bloc CTX si on détecte VSCode (TERM_PROGRAM=vscode, CLAUDE_CODE_ENTRYPOINT, VSCODE_PID, VSCODE_IPC_HOOK_CLI) ; (b) fallback fenêtre 1M si `last_total > 200K` sans suffixe, et clamp final à 99%.\n\nStats globales : 6 fichiers, +97/-14 lignes.\n\nLa branche source est `handoff/2026-05-10-pulse-watchdog-steve-ios` (intégrée dans `main` via les commits précédents, restée vivante pour itérer). Le merge final attendu sera `gh pr merge --rebase --delete-branch` vers `main`.",
+    "question": "Le fix VSCode du bloc CTX repose sur des variables d'environnement (TERM_PROGRAM, CLAUDE_CODE_ENTRYPOINT, VSCODE_PID, VSCODE_IPC_HOOK_CLI). Sont-elles fiables et exhaustives pour tous les modes d'invocation du plugin Claude Code dans VSCode (terminal intégré vs panneau chat dédié vs Cursor/Windsurf qui forkent VSCode) ? Si une seule manque, le bug 117% réapparaît silencieusement. Existe-t-il un signal plus robuste — par ex. lecture du transcript et détection de l'absence de suffixe alors que les tokens dépassent un seuil, ou utilisation d'une variable propre à Claude Code ?",
+    "filesToRead": [
+      "hooks/model-metrics.sh",
+      "bin/master.js",
+      "src/master/session-manager.js",
+      "scripts/pulse-watchdog.js",
+      "src/pulse/write.js"
+    ],
+    "constraints": [
+      "Ne pas proposer de réécrire ce qui fonctionne",
+      "Se concentrer sur ce qui manque ou est fragile",
+      "INTERDIT de modifier du code source — tu es reviewer, pas développeur",
+      "INTERDIT de modifier meta ou from — ces champs sont ancrés par Claude"
+    ]
+  },
+  "response": {
+    "model": null,
+    "content": null,
+    "_instruction": "Écrire la réponse dans le champ 'content'. Ne pas modifier 'meta' ni 'from'. Utiliser l'outil d'édition de fichier. Quand terminé, dire : \"J'ai répondu dans [chemin du fichier].\""
+  },
+  "integration": null
+}
