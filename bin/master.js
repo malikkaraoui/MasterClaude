@@ -587,9 +587,8 @@ function readSessionSignal() {
 }
 
 // Détecte une session claude CLI Terminal interactive.
-// Discriminant : la commande complète vaut exactement "claude" (sans path ni args).
-// Exclut VS Code (binaire .vscode/extensions/.../native-binary/claude --output-format stream-json...)
-// et Claude.app (chemin /Applications/Claude.app/...).
+// Accepte "claude" exact OU chemin absolu se terminant par "/claude" sans arguments.
+// Exclut VS Code (--output-format stream-json), Claude.app (/Applications/), et master.js lui-même.
 function findExistingClaudeSession() {
   const r = spawnSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' });
   const pids = (r.stdout || '').split('\n')
@@ -598,10 +597,46 @@ function findExistingClaudeSession() {
       if (!m) return null;
       const pid = parseInt(m[1], 10);
       const cmd = m[2].trim();
-      return cmd === 'claude' && pid !== process.pid ? pid : null;
+      // Exclure VS Code extension et Claude.app
+      if (cmd.includes('--output-format') || cmd.includes('/Applications/Claude.app')) return null;
+      // Accepter "claude" exact OU /chemin/absolu/claude sans args
+      const isCliClaude = cmd === 'claude' || /^\/[^ ]+\/claude$/.test(cmd);
+      return isCliClaude && pid !== process.pid ? pid : null;
     })
     .filter(Boolean);
   return pids[0] || null;
+}
+
+// Cherche une fenêtre Terminal avec "claude" dans ses processus et l'active.
+// Injecte un Enter pour sortir du welcome screen idle.
+// Retourne true si une fenêtre a été trouvée et activée.
+async function findAndActivateExistingClaudeWindow() {
+  const findScript = `
+tell application "Terminal"
+  repeat with w in windows
+    repeat with t in tabs of w
+      if processes of t contains "claude" then
+        set index of w to 1
+        activate
+        return "found"
+      end if
+    end repeat
+  end repeat
+  return "notfound"
+end tell`;
+  const r = spawnSync('osascript', ['-e', findScript], { encoding: 'utf8', timeout: 10000 });
+  if (r.status !== 0 || r.stdout.trim() !== 'found') return false;
+
+  // Injecter un Enter pour réveiller la session idle (welcome screen → session active)
+  await new Promise(res => setTimeout(res, 400));
+  const wakeScript = `tell application "System Events"
+  tell process "Terminal"
+    key code 36
+  end tell
+end tell`;
+  spawnSync('osascript', ['-e', wakeScript], { encoding: 'utf8', timeout: 5000 });
+  process.stdout.write('[wake] fenêtre claude existante activée + Enter injecté\n');
+  return true;
 }
 
 // --- Réveil session : ouvre Terminal.app et lance `claude` dans MasterClaude ---
@@ -709,6 +744,21 @@ async function wakeClaudeSession() {
     } catch (e) {
       process.stderr.write(`[wake] parachute spawn error: ${e.message} — fallback osascript\n`);
     }
+  }
+
+  // Avant d'ouvrir une nouvelle fenêtre, chercher une session Terminal idle et la réactiver.
+  const wokenExisting = await findAndActivateExistingClaudeWindow();
+  if (wokenExisting) {
+    for (let i = 0; i < 60; i++) {
+      const sig = readSessionSignal();
+      if (isFreshSignal(sig)) {
+        process.stdout.write(`[wake] signal frais après réveil fenêtre existante PID=${sig.claudePid}\n`);
+        try { _unlink(WAKE_LOCK_FILE); } catch {}
+        return true;
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    process.stdout.write('[wake] fenêtre réactivée mais signal absent — ouverture nouvelle fenêtre\n');
   }
 
   await send('🚀 Réveil d\'une nouvelle session Claude…').catch(() => {});
@@ -1041,7 +1091,7 @@ const HELP = `Commandes Master :
 /projet off — revenir en mode global
 /register <nom> <chemin> — enregistrer un projet
 /reset — vider l'historique de la session
-/run <tâche> — exécute une tâche (outils complets) sur le projet actif
+/run [projet] <tâche> — exécute une tâche sur le projet nommé ou le projet actif
 /trigger <tâche> — lance RemoteTrigger cloud (Bash complet, répond ici directement)
 /migrate [raison] — demande à Claude de préparer un handoff puis migre la session (kill + nouvelle)`;
 
@@ -1166,7 +1216,10 @@ while (running) {
 
       if (!msg?.text) continue;
 
-      const text = msg.text.trim();
+      // Strip @botname prefix (mention Telegram groupe ou habitude utilisateur)
+      let text = msg.text.trim();
+      const mentionMatch = text.match(/^@\S+\s+([\s\S]+)$/);
+      if (mentionMatch) text = mentionMatch[1].trim();
       process.stdout.write(`[master] reçu: ${text}\n`);
 
       // Commandes système
@@ -1213,12 +1266,26 @@ while (running) {
         continue;
       }
 
-      // Commande projet direct : /run <prompt> → spawn claude sur projet actif (outils complets)
+      // /run [projet] <tâche> → spawn claude sur le projet nommé ou le projet actif
       if (text.startsWith('/run ')) {
-        const prompt = text.slice(5).trim();
-        const projectPath = sessions.active ? sessions.active.path : ROOT;
-        const projectName = sessions.active ? sessions.active.name : 'MasterClaude';
-        await send(`⚙️ Lancement sur ${projectName} (outils complets)…`);
+        const args = text.slice(5).trim();
+        const firstWord = args.split(' ')[0];
+        const resolved = sessions.resolve(firstWord);
+        let projectPath, projectName, prompt;
+        if (resolved) {
+          projectPath = resolved.path;
+          projectName = resolved.name;
+          prompt = args.slice(firstWord.length).trim();
+        } else {
+          projectPath = sessions.active ? sessions.active.path : ROOT;
+          projectName = sessions.active ? sessions.active.name : 'MasterClaude';
+          prompt = args;
+        }
+        if (!prompt) {
+          await send(`❌ Tâche vide. Usage : /run [projet] <tâche>`).catch(() => {});
+          continue;
+        }
+        await send(`⚙️ ${projectName} — "${prompt}"…`);
         const result = await spawnProjectSession(projectPath, prompt);
         await send(result || '✅ Terminé (pas de sortie)').catch(() => {});
         continue;

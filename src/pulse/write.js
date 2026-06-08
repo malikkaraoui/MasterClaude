@@ -23,6 +23,7 @@ export function serialisePoulsMd(data, body) {
     `  ceiling: ${Number(data.intensity.ceiling).toFixed(2)}`,
     ``,
     `lang: "${data.lang}"`,
+    ...(data.cwd ? [`cwd: "${data.cwd.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`] : []),
   ].join('\n');
 
   return `---\n${yaml}\n---\n\n${body ?? ''}\n`;

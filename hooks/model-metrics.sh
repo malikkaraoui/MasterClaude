@@ -166,8 +166,16 @@ fi
 # Extraction % fenêtre contexte — somme input + cache_read + cache_creation du DERNIER tour
 # Divisée par la fenêtre réelle (1M pour modèle suffixé [1m], 200K sinon)
 # Bug fix : input_tokens seul ne reflète que l'uncached (~0 quand cache hit) → faux 0%
+#
+# Skip VSCode : le plugin Claude Code dans VSCode ne propage pas le suffixe [1m]
+# dans le champ `model` → division par 200K alors qu'on est en 1M → faux 117%.
+# Détection : TERM_PROGRAM=vscode ou CLAUDE_CODE_ENTRYPOINT contient "vscode".
 CTX_INDICATOR=""
-if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+_IS_VSCODE=""
+if [ "$TERM_PROGRAM" = "vscode" ] || [[ "$CLAUDE_CODE_ENTRYPOINT" == *vscode* ]] || [ -n "$VSCODE_PID" ] || [ -n "$VSCODE_IPC_HOOK_CLI" ]; then
+  _IS_VSCODE="1"
+fi
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] && [ -z "$_IS_VSCODE" ]; then
   _CTX_PCT=$(python3 - "$TRANSCRIPT" "$MODEL_RAW" <<'PYEOF'
 import sys, json
 path = sys.argv[1]
@@ -196,8 +204,15 @@ try:
 except Exception:
     pass
 window = 1_000_000 if '[1m]' in model else 200_000
+# Fix robustesse : si on dépasse 200K sans suffixe [1m], on est forcément en 1M
+# (le suffixe peut être perdu en cours de route — plugins IDE, transcript compacté…).
+if last_total > 200_000 and window == 200_000:
+    window = 1_000_000
 if last_total > 0:
     pct = round(last_total / window * 100)
+    # Clamp à 99% — un % > 100 trahit toujours une fenêtre mal détectée
+    if pct > 99:
+        pct = 99
     print(pct)
 PYEOF
   )
